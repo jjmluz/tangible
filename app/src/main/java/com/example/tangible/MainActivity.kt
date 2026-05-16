@@ -25,7 +25,17 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import android.widget.Toast
-import com.example.tangible.data.*
+import com.example.tangible.data.ChromecastDevice
+import com.example.tangible.data.ChromecastDiscovery
+import com.example.tangible.data.ChromecastRepository
+import com.example.tangible.data.DiscogsRepository
+import com.example.tangible.data.DiscogsSearchResult
+import com.example.tangible.data.SonosDiscovery
+import com.example.tangible.data.SonosRepository
+import com.example.tangible.data.SonosSpeaker
+import com.example.tangible.data.SpotifyAuthRepository
+import com.example.tangible.data.SpotifyRepository
+import com.example.tangible.data.YouTubeRepository
 import com.example.tangible.ui.MainScreen
 import com.example.tangible.ui.MusicService
 import com.example.tangible.ui.MusicSpeaker
@@ -57,6 +67,9 @@ class MainActivity : ComponentActivity() {
     private var selectedSpeaker by mutableStateOf(MusicSpeaker.THIS_DEVICE)
     private var selectedSonosIp by mutableStateOf<String?>(null)
     private var sonosSpeakers by mutableStateOf<List<SonosSpeaker>>(emptyList())
+    private var chromecastDevices by mutableStateOf<List<ChromecastDevice>>(emptyList())
+    private var selectedChromecastId by mutableStateOf<String?>(null)
+    private var isSpotifyAuthorized by mutableStateOf(false)
 
     // Repositories
     private val discogsToken = "REMOVED_SECRET"
@@ -69,6 +82,11 @@ class MainActivity : ComponentActivity() {
     private val youtubeRepository by lazy { YouTubeRepository(youtubeApiKey) }
     private val sonosDiscovery by lazy { SonosDiscovery(this) }
     private val sonosRepository by lazy { SonosRepository() }
+    private val chromecastDiscovery by lazy { ChromecastDiscovery(this) }
+    private val chromecastRepository by lazy { ChromecastRepository(this) }
+    private val spotifyAuthRepository by lazy {
+        SpotifyAuthRepository(this, clientId, clientSecret, redirectUri)
+    }
 
     private var spotifyAppRemote: SpotifyAppRemote? = null
 
@@ -82,6 +100,8 @@ class MainActivity : ComponentActivity() {
         val speakerValue = prefs.getString("selected_speaker", MusicSpeaker.THIS_DEVICE.name)
         selectedSpeaker = MusicSpeaker.entries.find { it.name == speakerValue } ?: MusicSpeaker.THIS_DEVICE
         selectedSonosIp = prefs.getString("selected_sonos_ip", null)
+        selectedChromecastId = prefs.getString("selected_chromecast_id", null)
+        isSpotifyAuthorized = spotifyAuthRepository.isAuthorized
 
         // Handle deep link if app was started by it
         intent?.let { handleIntent(it) }
@@ -99,6 +119,11 @@ class MainActivity : ComponentActivity() {
                         onServiceSelected = {
                             selectedService = it
                             prefs.edit().putString("selected_service", it.name).apply()
+                            if (it == MusicService.YOUTUBE_MUSIC &&
+                                (selectedSpeaker == MusicSpeaker.SONOS || selectedSpeaker == MusicSpeaker.CHROMECAST)) {
+                                selectedSpeaker = MusicSpeaker.THIS_DEVICE
+                                prefs.edit().putString("selected_speaker", MusicSpeaker.THIS_DEVICE.name).apply()
+                            }
                         },
                         selectedSpeaker = selectedSpeaker,
                         onSpeakerSelected = {
@@ -112,6 +137,15 @@ class MainActivity : ComponentActivity() {
                             prefs.edit().putString("selected_sonos_ip", ip).apply()
                         },
                         onRefreshSonos = { refreshSonosSpeakers() },
+                        chromecastDevices = chromecastDevices,
+                        selectedChromecastId = selectedChromecastId,
+                        onChromecastDeviceSelected = { id ->
+                            selectedChromecastId = id
+                            prefs.edit().putString("selected_chromecast_id", id).apply()
+                        },
+                        onRefreshChromecast = { refreshChromecastDevices() },
+                        isSpotifyAuthorized = isSpotifyAuthorized,
+                        onConnectSpotify = { openSpotifyAuth() },
                         onStartWriting = { url ->
                             dataToWrite = url
                             isWritingMode = true
@@ -173,6 +207,46 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun refreshChromecastDevices() {
+        lifecycleScope.launch {
+            chromecastDevices = chromecastDiscovery.discoverDevices()
+        }
+    }
+
+    private fun playOnChromecast(spotifyUri: String) {
+        val deviceId = selectedChromecastId
+        if (deviceId == null) {
+            Toast.makeText(this, "Please select a Chromecast device in Settings", Toast.LENGTH_LONG).show()
+            return
+        }
+        val device = chromecastDevices.firstOrNull { it.id == deviceId }
+        if (device == null) {
+            Toast.makeText(this, "Selected Chromecast not found — tap refresh in Settings", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (!spotifyAuthRepository.isAuthorized) {
+            Toast.makeText(this, "Connect your Spotify account in Settings first", Toast.LENGTH_LONG).show()
+            openSpotifyAuth()
+            return
+        }
+        lifecycleScope.launch {
+            val ok = chromecastRepository.playSpotifyUri(device, spotifyUri, spotifyAuthRepository)
+            if (!ok) {
+                Toast.makeText(this@MainActivity, "Could not play on Chromecast", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun openSpotifyAuth() {
+        val url = spotifyAuthRepository.buildAuthUrl()
+        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try { startActivity(browserIntent) } catch (e: Exception) {
+            Toast.makeText(this, "No browser found to open Spotify login", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     override fun onStart() {
         super.onStart()
         connectToSpotify()
@@ -228,6 +302,23 @@ class MainActivity : ComponentActivity() {
 
         Log.d("Tangible", "Handling intent: action=$action, data=$data, isWritingMode=$isWritingMode")
 
+        // Handle Spotify OAuth callback
+        if (data?.scheme == "com.example.tangible" && data.host == "callback") {
+            val code = data.getQueryParameter("code")
+            if (code != null) {
+                lifecycleScope.launch {
+                    val success = spotifyAuthRepository.handleAuthCode(code)
+                    isSpotifyAuthorized = success
+                    if (success) {
+                        Toast.makeText(this@MainActivity, "Spotify connected", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this@MainActivity, "Spotify login failed", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            return
+        }
+
         var uris = TagMediaUris()
 
         fun parseTangibleUri(uri: Uri) {
@@ -281,6 +372,10 @@ class MainActivity : ComponentActivity() {
                 }
                 selectedService == MusicService.YOUTUBE_MUSIC && selectedSpeaker == MusicSpeaker.SONOS -> {
                     Toast.makeText(this, "YouTube Music + Sonos not yet implemented", Toast.LENGTH_SHORT).show()
+                }
+                selectedService == MusicService.SPOTIFY && selectedSpeaker == MusicSpeaker.CHROMECAST -> {
+                    val toPlay = uris.spotifyAlbum ?: uris.spotifyTrack
+                    toPlay?.let { playOnChromecast(it) }
                 }
             }
             return
@@ -410,6 +505,12 @@ fun TangibleApp(
     selectedSonosIp: String?,
     onSonosSpeakerSelected: (String) -> Unit,
     onRefreshSonos: () -> Unit,
+    chromecastDevices: List<ChromecastDevice>,
+    selectedChromecastId: String?,
+    onChromecastDeviceSelected: (String) -> Unit,
+    onRefreshChromecast: () -> Unit,
+    isSpotifyAuthorized: Boolean,
+    onConnectSpotify: () -> Unit,
     onStartWriting: (String) -> Unit,
     onCancelWriting: () -> Unit,
     onSearchAlbums: suspend (String) -> List<DiscogsSearchResult>,
@@ -449,7 +550,13 @@ fun TangibleApp(
                 sonosSpeakers = sonosSpeakers,
                 selectedSonosIp = selectedSonosIp,
                 onSonosSpeakerSelected = onSonosSpeakerSelected,
-                onRefreshSonos = onRefreshSonos
+                onRefreshSonos = onRefreshSonos,
+                chromecastDevices = chromecastDevices,
+                selectedChromecastId = selectedChromecastId,
+                onChromecastDeviceSelected = onChromecastDeviceSelected,
+                onRefreshChromecast = onRefreshChromecast,
+                isSpotifyAuthorized = isSpotifyAuthorized,
+                onConnectSpotify = onConnectSpotify
             )
         }
     }
