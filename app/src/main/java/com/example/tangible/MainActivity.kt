@@ -27,7 +27,8 @@ import androidx.navigation.compose.rememberNavController
 import android.widget.Toast
 import com.example.tangible.data.*
 import com.example.tangible.ui.MainScreen
-import com.example.tangible.ui.MusicPlayer
+import com.example.tangible.ui.MusicService
+import com.example.tangible.ui.MusicSpeaker
 import com.example.tangible.ui.SettingsScreen
 import com.example.tangible.ui.WriteTagScreen
 import com.spotify.android.appremote.api.ConnectionParams
@@ -52,7 +53,8 @@ class MainActivity : ComponentActivity() {
 
     // Settings
     private val prefs by lazy { getSharedPreferences("tangible_prefs", MODE_PRIVATE) }
-    private var selectedPlayer by mutableStateOf(MusicPlayer.SPOTIFY)
+    private var selectedService by mutableStateOf(MusicService.SPOTIFY)
+    private var selectedSpeaker by mutableStateOf(MusicSpeaker.THIS_DEVICE)
     private var selectedSonosIp by mutableStateOf<String?>(null)
     private var sonosSpeakers by mutableStateOf<List<SonosSpeaker>>(emptyList())
 
@@ -75,8 +77,10 @@ class MainActivity : ComponentActivity() {
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
         
         // Load settings
-        val playerValue = prefs.getString("selected_player", MusicPlayer.SPOTIFY.name)
-        selectedPlayer = MusicPlayer.entries.find { it.name == playerValue } ?: MusicPlayer.SPOTIFY
+        val serviceValue = prefs.getString("selected_service", MusicService.SPOTIFY.name)
+        selectedService = MusicService.entries.find { it.name == serviceValue } ?: MusicService.SPOTIFY
+        val speakerValue = prefs.getString("selected_speaker", MusicSpeaker.THIS_DEVICE.name)
+        selectedSpeaker = MusicSpeaker.entries.find { it.name == speakerValue } ?: MusicSpeaker.THIS_DEVICE
         selectedSonosIp = prefs.getString("selected_sonos_ip", null)
 
         // Handle deep link if app was started by it
@@ -91,10 +95,15 @@ class MainActivity : ComponentActivity() {
                     TangibleApp(
                         isWritingMode = isWritingMode,
                         writeError = writeError,
-                        selectedPlayer = selectedPlayer,
-                        onPlayerSelected = { 
-                            selectedPlayer = it 
-                            prefs.edit().putString("selected_player", it.name).apply()
+                        selectedService = selectedService,
+                        onServiceSelected = {
+                            selectedService = it
+                            prefs.edit().putString("selected_service", it.name).apply()
+                        },
+                        selectedSpeaker = selectedSpeaker,
+                        onSpeakerSelected = {
+                            selectedSpeaker = it
+                            prefs.edit().putString("selected_speaker", it.name).apply()
                         },
                         sonosSpeakers = sonosSpeakers,
                         selectedSonosIp = selectedSonosIp,
@@ -257,20 +266,21 @@ class MainActivity : ComponentActivity() {
         }
 
         if ((uris.spotifyTrack != null || uris.spotifyAlbum != null || uris.ytm != null) && !isWritingMode) {
-            Log.d("Tangible", "Action: selectedPlayer=$selectedPlayer, uris=$uris")
-            when (selectedPlayer) {
-                MusicPlayer.SPOTIFY -> {
-                    // Favor track for phone autoplay
+            Log.d("Tangible", "Action: selectedService=$selectedService, selectedSpeaker=$selectedSpeaker, uris=$uris")
+            when {
+                selectedService == MusicService.SPOTIFY && selectedSpeaker == MusicSpeaker.THIS_DEVICE -> {
                     val toPlay = uris.spotifyTrack ?: uris.spotifyAlbum
                     toPlay?.let { playOnSpotify(it) }
                 }
-                MusicPlayer.YOUTUBE_MUSIC -> {
+                selectedService == MusicService.YOUTUBE_MUSIC && selectedSpeaker == MusicSpeaker.THIS_DEVICE -> {
                     uris.ytm?.let { playOnYouTubeMusic(it) }
                 }
-                MusicPlayer.SONOS -> {
-                    // Favor album for Sonos
+                selectedService == MusicService.SPOTIFY && selectedSpeaker == MusicSpeaker.SONOS -> {
                     val toPlay = uris.spotifyAlbum ?: uris.spotifyTrack
                     toPlay?.let { playOnSonos(it) }
+                }
+                selectedService == MusicService.YOUTUBE_MUSIC && selectedSpeaker == MusicSpeaker.SONOS -> {
+                    Toast.makeText(this, "YouTube Music + Sonos not yet implemented", Toast.LENGTH_SHORT).show()
                 }
             }
             return
@@ -392,8 +402,10 @@ class MainActivity : ComponentActivity() {
 fun TangibleApp(
     isWritingMode: Boolean,
     writeError: String?,
-    selectedPlayer: MusicPlayer,
-    onPlayerSelected: (MusicPlayer) -> Unit,
+    selectedService: MusicService,
+    onServiceSelected: (MusicService) -> Unit,
+    selectedSpeaker: MusicSpeaker,
+    onSpeakerSelected: (MusicSpeaker) -> Unit,
     sonosSpeakers: List<SonosSpeaker>,
     selectedSonosIp: String?,
     onSonosSpeakerSelected: (String) -> Unit,
@@ -430,8 +442,10 @@ fun TangibleApp(
         composable("settings") {
             SettingsScreen(
                 onBackClick = { navController.popBackStack() },
-                selectedPlayer = selectedPlayer,
-                onPlayerSelected = onPlayerSelected,
+                selectedService = selectedService,
+                onServiceSelected = onServiceSelected,
+                selectedSpeaker = selectedSpeaker,
+                onSpeakerSelected = onSpeakerSelected,
                 sonosSpeakers = sonosSpeakers,
                 selectedSonosIp = selectedSonosIp,
                 onSonosSpeakerSelected = onSonosSpeakerSelected,

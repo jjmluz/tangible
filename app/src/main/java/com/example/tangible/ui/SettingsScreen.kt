@@ -14,9 +14,13 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.example.tangible.data.SonosSpeaker
 
-enum class MusicPlayer(val displayName: String) {
+enum class MusicService(val displayName: String) {
     SPOTIFY("Spotify"),
-    YOUTUBE_MUSIC("YouTube Music"),
+    YOUTUBE_MUSIC("YouTube Music")
+}
+
+enum class MusicSpeaker(val displayName: String) {
+    THIS_DEVICE("This device"),
     SONOS("Sonos")
 }
 
@@ -24,8 +28,10 @@ enum class MusicPlayer(val displayName: String) {
 @Composable
 fun SettingsScreen(
     onBackClick: () -> Unit,
-    selectedPlayer: MusicPlayer,
-    onPlayerSelected: (MusicPlayer) -> Unit,
+    selectedService: MusicService,
+    onServiceSelected: (MusicService) -> Unit,
+    selectedSpeaker: MusicSpeaker,
+    onSpeakerSelected: (MusicSpeaker) -> Unit,
     sonosSpeakers: List<SonosSpeaker>,
     selectedSonosIp: String?,
     onSonosSpeakerSelected: (String) -> Unit,
@@ -50,32 +56,30 @@ fun SettingsScreen(
                 .fillMaxSize()
         ) {
             Text(
-                text = "Default Music Player",
+                text = "Default music service",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
-
-            val options = MusicPlayer.entries
             Column(Modifier.selectableGroup()) {
-                options.forEach { player ->
+                MusicService.entries.forEach { service ->
                     Row(
                         Modifier
                             .fillMaxWidth()
                             .height(56.dp)
                             .selectable(
-                                selected = (player == selectedPlayer),
-                                onClick = { onPlayerSelected(player) },
+                                selected = (service == selectedService),
+                                onClick = { onServiceSelected(service) },
                                 role = Role.RadioButton
                             )
                             .padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(
-                            selected = (player == selectedPlayer),
+                            selected = (service == selectedService),
                             onClick = null
                         )
                         Text(
-                            text = player.displayName,
+                            text = service.displayName,
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier.padding(start = 16.dp)
                         )
@@ -83,7 +87,41 @@ fun SettingsScreen(
                 }
             }
 
-            if (selectedPlayer == MusicPlayer.SONOS) {
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "Default music speaker",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Column(Modifier.selectableGroup()) {
+                MusicSpeaker.entries.forEach { speaker ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .selectable(
+                                selected = (speaker == selectedSpeaker),
+                                onClick = { onSpeakerSelected(speaker) },
+                                role = Role.RadioButton
+                            )
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = (speaker == selectedSpeaker),
+                            onClick = null
+                        )
+                        Text(
+                            text = speaker.displayName,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(start = 16.dp)
+                        )
+                    }
+                }
+            }
+
+            if (selectedSpeaker == MusicSpeaker.SONOS) {
                 Spacer(modifier = Modifier.height(24.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -91,7 +129,7 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Default Sonos Speaker",
+                        text = "Default Sonos speaker",
                         style = MaterialTheme.typography.titleMedium
                     )
                     IconButton(onClick = onRefreshSonos) {
@@ -108,15 +146,15 @@ fun SettingsScreen(
                     )
                 } else {
                     Column(Modifier.selectableGroup()) {
-                        sonosSpeakers.forEach { speaker ->
-                            val isSelected = speaker.ip == selectedSonosIp
+                        sonosSpeakers.forEach { sonosSpeaker ->
+                            val isSelected = sonosSpeaker.ip == selectedSonosIp
                             Row(
                                 Modifier
                                     .fillMaxWidth()
                                     .height(56.dp)
                                     .selectable(
                                         selected = isSelected,
-                                        onClick = { onSonosSpeakerSelected(speaker.ip) },
+                                        onClick = { onSonosSpeakerSelected(sonosSpeaker.ip) },
                                         role = Role.RadioButton
                                     )
                                     .padding(horizontal = 16.dp),
@@ -128,11 +166,11 @@ fun SettingsScreen(
                                 )
                                 Column(modifier = Modifier.padding(start = 16.dp)) {
                                     Text(
-                                        text = speaker.name,
+                                        text = sonosSpeaker.name,
                                         style = MaterialTheme.typography.bodyLarge
                                     )
                                     Text(
-                                        text = speaker.model,
+                                        text = sonosSpeaker.model,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
