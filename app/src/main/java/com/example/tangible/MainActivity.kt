@@ -69,6 +69,7 @@ class MainActivity : ComponentActivity() {
     private var sonosSpeakers by mutableStateOf<List<SonosSpeaker>>(emptyList())
     private var chromecastDevices by mutableStateOf<List<ChromecastDevice>>(emptyList())
     private var selectedChromecastId by mutableStateOf<String?>(null)
+    private var selectedChromecastName by mutableStateOf<String?>(null)
     private var isSpotifyAuthorized by mutableStateOf(false)
 
     // Repositories
@@ -101,6 +102,7 @@ class MainActivity : ComponentActivity() {
         selectedSpeaker = MusicSpeaker.entries.find { it.name == speakerValue } ?: MusicSpeaker.THIS_DEVICE
         selectedSonosIp = prefs.getString("selected_sonos_ip", null)
         selectedChromecastId = prefs.getString("selected_chromecast_id", null)
+        selectedChromecastName = prefs.getString("selected_chromecast_name", null)
         isSpotifyAuthorized = spotifyAuthRepository.isAuthorized
 
         // Handle deep link if app was started by it
@@ -142,6 +144,10 @@ class MainActivity : ComponentActivity() {
                         onChromecastDeviceSelected = { id ->
                             selectedChromecastId = id
                             prefs.edit().putString("selected_chromecast_id", id).apply()
+                            chromecastDevices.firstOrNull { it.id == id }?.name?.let { name ->
+                                selectedChromecastName = name
+                                prefs.edit().putString("selected_chromecast_name", name).apply()
+                            }
                         },
                         onRefreshChromecast = { refreshChromecastDevices() },
                         isSpotifyAuthorized = isSpotifyAuthorized,
@@ -219,17 +225,26 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "Please select a Chromecast device in Settings", Toast.LENGTH_LONG).show()
             return
         }
-        val device = chromecastDevices.firstOrNull { it.id == deviceId }
-        if (device == null) {
-            Toast.makeText(this, "Selected Chromecast not found — tap refresh in Settings", Toast.LENGTH_LONG).show()
-            return
-        }
         if (!spotifyAuthRepository.isAuthorized) {
             Toast.makeText(this, "Connect your Spotify account in Settings first", Toast.LENGTH_LONG).show()
             openSpotifyAuth()
             return
         }
         lifecycleScope.launch {
+            var device = chromecastDevices.firstOrNull { it.id == deviceId }
+                ?: selectedChromecastName?.let { ChromecastDevice(id = deviceId, name = it, host = "", port = 0) }
+
+            if (device == null) {
+                val discovered = chromecastDiscovery.discoverDevices()
+                chromecastDevices = discovered
+                device = discovered.firstOrNull { it.id == deviceId }
+            }
+
+            if (device == null) {
+                Toast.makeText(this@MainActivity, "Selected Chromecast not found — tap refresh in Settings", Toast.LENGTH_LONG).show()
+                return@launch
+            }
+
             val ok = chromecastRepository.playSpotifyUri(device, spotifyUri, spotifyAuthRepository)
             if (!ok) {
                 Toast.makeText(this@MainActivity, "Could not play on Chromecast", Toast.LENGTH_SHORT).show()
