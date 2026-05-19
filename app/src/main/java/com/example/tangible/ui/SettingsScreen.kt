@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import com.example.tangible.SONOS_ALL_SPEAKERS
 import com.example.tangible.data.ChromecastDevice
 import com.example.tangible.data.SonosSpeaker
 
@@ -309,6 +310,31 @@ fun SettingsScreen(
                     )
                 } else {
                     Column(Modifier.selectableGroup()) {
+                        // All speakers option
+                        val isAllSelected = selectedSonosIp == SONOS_ALL_SPEAKERS
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(56.dp)
+                                .selectable(
+                                    selected = isAllSelected,
+                                    onClick = { onSonosSpeakerSelected(SONOS_ALL_SPEAKERS) },
+                                    role = Role.RadioButton
+                                )
+                                .padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = isAllSelected,
+                                onClick = null
+                            )
+                            Text(
+                                text = "All speakers",
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.padding(start = 16.dp)
+                            )
+                        }
+
                         sonosSpeakers.forEach { sonosSpeaker ->
                             val isSelected = sonosSpeaker.ip == selectedSonosIp
                             Row(

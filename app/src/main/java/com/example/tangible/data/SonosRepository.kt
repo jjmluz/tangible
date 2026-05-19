@@ -89,10 +89,8 @@ class SonosRepository {
 
         return try {
             client.newCall(request).execute().use { response ->
-                val responseBody = response.body?.string()
-                if (response.isSuccessful) {
-                    Log.v(TAG, "$action success")
-                } else {
+                if (!response.isSuccessful) {
+                    val responseBody = response.body?.string()
                     Log.d(TAG, "$action failed: ${response.code} $responseBody")
                 }
                 response.isSuccessful
@@ -103,15 +101,53 @@ class SonosRepository {
         }
     }
 
-    private fun getSpeakerUuid(ip: String): String? {
-        return try {
+    suspend fun getSpeakerUuid(ip: String): String? = withContext(Dispatchers.IO) {
+        try {
             val url = "http://$ip:1400/xml/device_description.xml"
-            val xml = java.net.URL(url).openConnection().getInputStream().bufferedReader().use { it.readText() }
+            val xml = java.net.URL(url).openConnection().apply { connectTimeout = 1000 }.getInputStream().bufferedReader().use { it.readText() }
             xml.substringAfter("<UDN>uuid:").substringBefore("</UDN>")
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching UUID: ${e.message}")
+            Log.e(TAG, "Error fetching UUID for $ip: ${e.message}")
             null
         }
+    }
+
+    suspend fun joinGroup(slaveIp: String, masterUuid: String): Boolean = withContext(Dispatchers.IO) {
+        val soapBody = """<?xml version="1.0" encoding="utf-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+    <s:Body>
+        <u:SetAVTransportURI xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
+            <InstanceID>0</InstanceID>
+            <CurrentURI>x-rincon:$masterUuid</CurrentURI>
+            <CurrentURIMetaData></CurrentURIMetaData>
+        </u:SetAVTransportURI>
+    </s:Body>
+</s:Envelope>""".trimIndent()
+        sendSoapRequest(slaveIp, "AVTransport", "SetAVTransportURI", soapBody)
+    }
+
+    suspend fun becomeMaster(ip: String): Boolean = withContext(Dispatchers.IO) {
+        val soapBody = """<?xml version="1.0" encoding="utf-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/envelope/">
+    <s:Body>
+        <u:BecomeCoordinatorOfStandaloneGroup xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
+            <InstanceID>0</InstanceID>
+        </u:BecomeCoordinatorOfStandaloneGroup>
+    </s:Body>
+</s:Envelope>""".trimIndent()
+        sendSoapRequest(ip, "AVTransport", "BecomeCoordinatorOfStandaloneGroup", soapBody)
+    }
+
+    suspend fun stop(ip: String): Boolean = withContext(Dispatchers.IO) {
+        val soapBody = """<?xml version="1.0" encoding="utf-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/envelope/">
+    <s:Body>
+        <u:Stop xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
+            <InstanceID>0</InstanceID>
+        </u:Stop>
+    </s:Body>
+</s:Envelope>""".trimIndent()
+        sendSoapRequest(ip, "AVTransport", "Stop", soapBody)
     }
 
     // Find the coordinator IP for a speaker's group.

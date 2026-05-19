@@ -137,8 +137,8 @@ class SonosDiscovery(private val context: Context) {
     private fun fetchDeviceDescription(url: String): SonosSpeaker? {
         return try {
             val connection = URL(url).openConnection()
-            connection.connectTimeout = 1000 // Increased timeout
-            connection.readTimeout = 1000
+            connection.connectTimeout = 2000 
+            connection.readTimeout = 2000
             val xml = connection.getInputStream().bufferedReader().use { it.readText() }
             
             if (xml.contains("Sonos") || xml.contains("ZonePlayer")) {

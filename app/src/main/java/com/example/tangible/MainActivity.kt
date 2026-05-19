@@ -10,6 +10,7 @@ import android.nfc.NdefRecord
 import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.nfc.tech.Ndef
+import android.nfc.tech.NdefFormatable
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
@@ -62,6 +63,8 @@ data class TagMediaUris(
     val spotifyAlbum: String? = null,
     val ytm: String? = null
 )
+
+const val SONOS_ALL_SPEAKERS = "ALL_SPEAKERS"
 
 class MainActivity : ComponentActivity() {
     private var nfcAdapter: NfcAdapter? = null
@@ -266,7 +269,8 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             sonosSpeakers = sonosDiscovery.discoverSpeakers()
             // Diagnostics: if a speaker is selected, log what it's playing
-            selectedSonosIp?.let { ip ->
+            val ip = selectedSonosIp
+            if (ip != null && ip != SONOS_ALL_SPEAKERS) {
                 sonosRepository.getPlayingInfo(ip)
             }
         }
@@ -375,6 +379,26 @@ class MainActivity : ComponentActivity() {
         val data: Uri? = intent.data
 
         Log.d("Tangible", "Handling intent: action=$action, data=$data, isWritingMode=$isWritingMode")
+
+        // Handle writing mode first if it's an NFC action
+        if (isWritingMode && (
+                NfcAdapter.ACTION_TAG_DISCOVERED == action ||
+                NfcAdapter.ACTION_NDEF_DISCOVERED == action ||
+                NfcAdapter.ACTION_TECH_DISCOVERED == action
+            )) {
+            val tag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(NfcAdapter.EXTRA_TAG, Tag::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(NfcAdapter.EXTRA_TAG)
+            }
+            if (tag != null) {
+                writeToTag(tag, dataToWrite ?: "")
+            } else {
+                Log.e("Tangible", "NFC Tag extra is null")
+            }
+            return
+        }
 
         // Handle Spotify OAuth callback
         if (data?.scheme == "com.example.tangible" && data.host == "callback") {
@@ -485,21 +509,6 @@ class MainActivity : ComponentActivity() {
             }
             return
         }
-
-        if (isWritingMode) {
-            if (NfcAdapter.ACTION_TAG_DISCOVERED == action ||
-                NfcAdapter.ACTION_NDEF_DISCOVERED == action ||
-                NfcAdapter.ACTION_TECH_DISCOVERED == action
-            ) {
-                val tag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableExtra(NfcAdapter.EXTRA_TAG, Tag::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableExtra(NfcAdapter.EXTRA_TAG)
-                }
-                tag?.let { writeToTag(it, dataToWrite ?: "") }
-            }
-        }
     }
 
     private fun playMovie(url: String) {
@@ -521,13 +530,57 @@ class MainActivity : ComponentActivity() {
         }
         
         lifecycleScope.launch {
-            if (spotifyUri.startsWith("spotify:")) {
-                sonosRepository.playSpotifyUri(ip, spotifyUri)
+            val finalUri = if (spotifyUri.startsWith("spotify:")) {
+                spotifyUri
             } else {
                 val results = spotifyRepository.searchAlbums(spotifyUri)
-                results.firstOrNull()?.let { album ->
-                    sonosRepository.playSpotifyUri(ip, album.uri)
+                results.firstOrNull()?.uri
+            }
+
+            if (finalUri == null) {
+                Log.e("Tangible", "Could not resolve Spotify URI for $spotifyUri")
+                return@launch
+            }
+
+            if (ip == SONOS_ALL_SPEAKERS) {
+                // Always rediscover to get latest topology when broadcasting
+                val discovered = sonosDiscovery.discoverSpeakers()
+                if (discovered.isNotEmpty()) {
+                    sonosSpeakers = discovered
                 }
+                
+                if (sonosSpeakers.isEmpty()) {
+                    Toast.makeText(this@MainActivity, "No Sonos speakers found", Toast.LENGTH_SHORT).show()
+                } else {
+                    Log.d("Tangible", "Found ${sonosSpeakers.size} speakers for broadcast")
+                    Toast.makeText(this@MainActivity, "Grouping ${sonosSpeakers.size} speakers and playing...", Toast.LENGTH_SHORT).show()
+                    
+                    val master = sonosSpeakers[0]
+                    val masterUuid = sonosRepository.getSpeakerUuid(master.ip)
+                    Log.d("Tangible", "Master speaker: ${master.name} (${master.ip}), UUID: $masterUuid")
+                    
+                    if (masterUuid != null) {
+                        // 1. Make the first speaker the coordinator
+                        sonosRepository.becomeMaster(master.ip)
+                        delay(500)
+
+                        // 2. Tell all other speakers to stop and join the master
+                        sonosSpeakers.drop(1).forEach { slave ->
+                            Log.d("Tangible", "Preparing slave: ${slave.name} (${slave.ip})")
+                            launch {
+                                sonosRepository.stop(slave.ip)
+                                delay(200)
+                                val success = sonosRepository.joinGroup(slave.ip, masterUuid)
+                                Log.d("Tangible", "Join ${slave.name} result: $success")
+                            }
+                        }
+                        // 3. Wait for the topology to stabilize
+                        delay(3000)
+                    }
+                    sonosRepository.playSpotifyUri(master.ip, finalUri)
+                }
+            } else {
+                sonosRepository.playSpotifyUri(ip, finalUri)
             }
         }
     }
@@ -578,8 +631,8 @@ class MainActivity : ComponentActivity() {
             this, 0, intent,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
         )
-        val filters = arrayOf(IntentFilter(NfcAdapter.ACTION_TAG_DISCOVERED))
-        nfcAdapter?.enableForegroundDispatch(this, pendingIntent, filters, null)
+        // Passing null filters and techLists makes foreground dispatch catch all NFC intents
+        nfcAdapter?.enableForegroundDispatch(this, pendingIntent, null, null)
     }
 
     private fun disableNfcForegroundDispatch() {
@@ -587,25 +640,52 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun writeToTag(tag: Tag, data: String) {
-        val ndef = Ndef.get(tag) ?: return
+        Log.d("Tangible", "Writing to tag: $data")
+        val ndef = Ndef.get(tag)
+        val record = NdefRecord.createUri(data)
+        val records = mutableListOf(record)
+        if (data.startsWith("tangible:")) {
+            records.add(NdefRecord.createApplicationRecord(packageName))
+        }
+        val message = NdefMessage(records.toTypedArray())
+
         try {
-            ndef.connect()
-            val record = NdefRecord.createUri(data)
-            val records = mutableListOf(record)
-            if (data.startsWith("tangible:")) {
-                records.add(NdefRecord.createApplicationRecord(packageName))
+            if (ndef != null) {
+                ndef.connect()
+                if (!ndef.isWritable) {
+                    writeError = "Tag is read-only"
+                    return
+                }
+                if (ndef.maxSize < message.toByteArray().size) {
+                    writeError = "Tag capacity too small (${ndef.maxSize} bytes)"
+                    return
+                }
+                ndef.writeNdefMessage(message)
+                finishWriting()
+            } else {
+                val formatable = NdefFormatable.get(tag)
+                if (formatable != null) {
+                    formatable.connect()
+                    formatable.format(message)
+                    finishWriting()
+                } else {
+                    writeError = "Tag doesn't support NDEF"
+                }
             }
-            val message = NdefMessage(records.toTypedArray())
-            ndef.writeNdefMessage(message)
-            isWritingMode = false
-            dataToWrite = null
-            writeError = null
-            showSuccessDialog = true
         } catch (e: Exception) {
+            Log.e("Tangible", "Error writing to tag", e)
             writeError = "Failed to write: ${e.message}"
         } finally {
-            try { ndef.close() } catch (e: Exception) {}
+            try { ndef?.close() } catch (e: Exception) {}
         }
+    }
+
+    private fun finishWriting() {
+        isWritingMode = false
+        dataToWrite = null
+        writeError = null
+        showSuccessDialog = true
+        Log.d("Tangible", "Successfully wrote to tag")
     }
 }
 
