@@ -30,17 +30,26 @@ import com.example.tangible.data.ChromecastDiscovery
 import com.example.tangible.data.ChromecastRepository
 import com.example.tangible.data.DiscogsRepository
 import com.example.tangible.data.DiscogsSearchResult
+import com.example.tangible.data.MovieProvider
+import com.example.tangible.data.MovieStreamingResult
+import com.example.tangible.data.ResolvedService
 import com.example.tangible.data.SonosDiscovery
 import com.example.tangible.data.SonosRepository
 import com.example.tangible.data.SonosSpeaker
 import com.example.tangible.data.SpotifyAuthRepository
 import com.example.tangible.data.SpotifyRepository
+import com.example.tangible.data.StreamingAvailabilityRepository
+import com.example.tangible.data.TmdbMovieResult
+import com.example.tangible.data.TmdbRepository
 import com.example.tangible.data.YouTubeRepository
 import com.example.tangible.ui.MainScreen
+import com.example.tangible.ui.MovieProvidersScreen
 import com.example.tangible.ui.MusicService
 import com.example.tangible.ui.MusicSpeaker
 import com.example.tangible.ui.SettingsScreen
 import com.example.tangible.ui.WriteTagScreen
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.spotify.android.appremote.api.ConnectionParams
 import com.spotify.android.appremote.api.Connector
 import com.spotify.android.appremote.api.SpotifyAppRemote
@@ -63,6 +72,7 @@ class MainActivity : ComponentActivity() {
 
     // Settings
     private val prefs by lazy { getSharedPreferences("tangible_prefs", MODE_PRIVATE) }
+    private val gson = Gson()
     private var selectedService by mutableStateOf(MusicService.SPOTIFY)
     private var selectedSpeaker by mutableStateOf(MusicSpeaker.THIS_DEVICE)
     private var selectedSonosIp by mutableStateOf<String?>(null)
@@ -71,10 +81,17 @@ class MainActivity : ComponentActivity() {
     private var selectedChromecastId by mutableStateOf<String?>(null)
     private var selectedChromecastName by mutableStateOf<String?>(null)
     private var isSpotifyAuthorized by mutableStateOf(false)
+    private var region by mutableStateOf("US")
+    private var movieProviders by mutableStateOf<List<MovieProvider>>(emptyList())
 
     // Repositories
     private val discogsToken = "REMOVED_SECRET"
     private val discogsRepository by lazy { DiscogsRepository(discogsToken) }
+    private val tmdbApiKey = "REMOVED_SECRET"
+    private val tmdbRepository by lazy { TmdbRepository(tmdbApiKey) }
+    // Register at https://rapidapi.com/movie-of-the-night-movie-of-the-night-default/api/streaming-availability
+    private val streamingApiKey = "REMOVED_SECRET"
+    private val streamingRepository by lazy { StreamingAvailabilityRepository(streamingApiKey) }
     private val clientId = "REMOVED_SECRET"
     private val clientSecret = "REMOVED_SECRET"
     private val redirectUri = "com.example.tangible://callback"
@@ -104,6 +121,8 @@ class MainActivity : ComponentActivity() {
         selectedChromecastId = prefs.getString("selected_chromecast_id", null)
         selectedChromecastName = prefs.getString("selected_chromecast_name", null)
         isSpotifyAuthorized = spotifyAuthRepository.isAuthorized
+        region = prefs.getString("region", "US") ?: "US"
+        loadMovieProviders()
 
         // Handle deep link if app was started by it
         intent?.let { handleIntent(it) }
@@ -165,24 +184,49 @@ class MainActivity : ComponentActivity() {
                         onSearchAlbums = { query ->
                             discogsRepository.searchAlbums(query)
                         },
+                        onSearchMovies = { query ->
+                            tmdbRepository.searchMovies(query)
+                        },
+                        onGetMovieStreaming = { tmdbId ->
+                            streamingRepository.getMovieStreamingResult(tmdbId, region)
+                        },
+                        selectedRegion = region,
+                        onRegionSelected = { newRegion ->
+                            if (newRegion != region) {
+                                region = newRegion
+                                prefs.edit().putString("region", newRegion).apply()
+                                movieProviders = emptyList()
+                                saveMovieProviders(emptyList())
+                                // Persist cleared state immediately
+                                prefs.edit().remove("movie_providers").apply()
+                            }
+                        },
                         onAlbumSelected = { discogsAlbum ->
                             val spotifyResults = spotifyRepository.searchAlbums(discogsAlbum.title)
                             val album = spotifyResults.firstOrNull()
                             val spotifyAlbumUri = album?.uri
                             val spotifyTrackUri = album?.let { spotifyRepository.getFirstTrackUri(it.id) }
-                            
+
                             val parts = discogsAlbum.title.split(" - ", limit = 2)
                             val ytmUri = if (parts.size == 2) {
                                 youtubeRepository.searchAlbum(parts[1], parts[0])
                             } else {
                                 youtubeRepository.searchAlbum(discogsAlbum.title, "")
                             } ?: "https://music.youtube.com/search?q=${Uri.encode(discogsAlbum.title)}"
-                            
+
                             TagMediaUris(
                                 spotifyTrack = spotifyTrackUri,
                                 spotifyAlbum = spotifyAlbumUri,
                                 ytm = ytmUri
                             )
+                        },
+                        movieProviders = movieProviders,
+                        onMovieProvidersChanged = { providers ->
+                            movieProviders = providers
+                            saveMovieProviders(providers)
+                        },
+                        onGetServicesForRegion = { reg ->
+                            streamingRepository.getServicesForRegion(reg)
                         }
                     )
 
@@ -200,6 +244,21 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    private fun saveMovieProviders(providers: List<MovieProvider>) {
+        val json = gson.toJson(providers)
+        prefs.edit().putString("movie_providers", json).apply()
+    }
+
+    private fun loadMovieProviders() {
+        val json = prefs.getString("movie_providers", null)
+        movieProviders = if (json != null) {
+            val type = object : TypeToken<List<MovieProvider>>() {}.type
+            gson.fromJson(json, type)
+        } else {
+            emptyList()
         }
     }
 
@@ -335,6 +394,7 @@ class MainActivity : ComponentActivity() {
         }
 
         var uris = TagMediaUris()
+        var movieToPlay: String? = null
 
         fun parseTangibleUri(uri: Uri) {
             if (uri.scheme == "tangible" && (uri.host == "play" || uri.host == null)) {
@@ -343,6 +403,31 @@ class MainActivity : ComponentActivity() {
                     spotifyAlbum = uri.getQueryParameter("spotify_album"),
                     ytm = uri.getQueryParameter("ytm")
                 )
+            } else if (uri.scheme == "tangible" && uri.host == "movie") {
+                val typePriority = listOf("s", "f", "r", "b")
+                val enabledProviders = movieProviders.filter { it.isEnabled }
+                val candidates = StreamingAvailabilityRepository.ALL_SERVICE_KEYS
+                    .mapNotNull { key ->
+                        val encoded = uri.getQueryParameter(key) ?: return@mapNotNull null
+                        val providerId = StreamingAvailabilityRepository.getProviderId(key) ?: return@mapNotNull null
+                        val resolved = StreamingAvailabilityRepository.resolveService(key, encoded) ?: return@mapNotNull null
+                        Triple(key, providerId, resolved)
+                    }
+
+                movieToPlay = if (movieProviders.isNotEmpty()) {
+                    val enabledIds = enabledProviders.map { it.id }
+                    candidates
+                        .filter { it.second in enabledIds }
+                        .sortedWith(compareBy(
+                            { typePriority.indexOf(it.third.typeCode).let { i -> if (i < 0) Int.MAX_VALUE else i } },
+                            { enabledIds.indexOf(it.second) }
+                        ))
+                        .firstOrNull()?.third?.url
+                } else {
+                    candidates
+                        .sortedBy { typePriority.indexOf(it.third.typeCode).let { i -> if (i < 0) Int.MAX_VALUE else i } }
+                        .firstOrNull()?.third?.url
+                }
             } else if (uri.scheme == "https" && uri.host == "open.spotify.com") {
                 val pathSegments = uri.pathSegments
                 if (pathSegments.size >= 2) {
@@ -358,7 +443,7 @@ class MainActivity : ComponentActivity() {
 
         data?.let { parseTangibleUri(it) }
 
-        if (uris.spotifyTrack == null && uris.spotifyAlbum == null && uris.ytm == null) {
+        if (uris.spotifyTrack == null && uris.spotifyAlbum == null && uris.ytm == null && movieToPlay == null) {
             val rawMsgs = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES)
             rawMsgs?.forEach {
                 val msg = it as NdefMessage
@@ -369,6 +454,11 @@ class MainActivity : ComponentActivity() {
                     } catch (e: Exception) {}
                 }
             }
+        }
+
+        if (movieToPlay != null && !isWritingMode) {
+            playMovie(movieToPlay!!)
+            return
         }
 
         if ((uris.spotifyTrack != null || uris.spotifyAlbum != null || uris.ytm != null) && !isWritingMode) {
@@ -409,6 +499,17 @@ class MainActivity : ComponentActivity() {
                 }
                 tag?.let { writeToTag(it, dataToWrite ?: "") }
             }
+        }
+    }
+
+    private fun playMovie(url: String) {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "No app found to open this streaming service", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -529,7 +630,14 @@ fun TangibleApp(
     onStartWriting: (String) -> Unit,
     onCancelWriting: () -> Unit,
     onSearchAlbums: suspend (String) -> List<DiscogsSearchResult>,
-    onAlbumSelected: suspend (DiscogsSearchResult) -> TagMediaUris
+    onSearchMovies: suspend (String) -> List<TmdbMovieResult>,
+    onGetMovieStreaming: suspend (Int) -> MovieStreamingResult,
+    selectedRegion: String,
+    onRegionSelected: (String) -> Unit,
+    onAlbumSelected: suspend (DiscogsSearchResult) -> TagMediaUris,
+    movieProviders: List<MovieProvider>,
+    onMovieProvidersChanged: (List<MovieProvider>) -> Unit,
+    onGetServicesForRegion: suspend (String) -> List<MovieProvider>
 ) {
     val navController = rememberNavController()
     NavHost(navController = navController, startDestination = "main") {
@@ -552,12 +660,16 @@ fun TangibleApp(
                 },
                 onCancelClick = onCancelWriting,
                 onSearchAlbums = onSearchAlbums,
+                onSearchMovies = onSearchMovies,
+                onGetMovieStreaming = onGetMovieStreaming,
+                region = selectedRegion,
                 onAlbumSelected = onAlbumSelected
             )
         }
         composable("settings") {
             SettingsScreen(
                 onBackClick = { navController.popBackStack() },
+                onMovieProvidersClick = { navController.navigate("movie_providers") },
                 selectedService = selectedService,
                 onServiceSelected = onServiceSelected,
                 selectedSpeaker = selectedSpeaker,
@@ -571,7 +683,18 @@ fun TangibleApp(
                 onChromecastDeviceSelected = onChromecastDeviceSelected,
                 onRefreshChromecast = onRefreshChromecast,
                 isSpotifyAuthorized = isSpotifyAuthorized,
-                onConnectSpotify = onConnectSpotify
+                onConnectSpotify = onConnectSpotify,
+                selectedRegion = selectedRegion,
+                onRegionSelected = onRegionSelected
+            )
+        }
+        composable("movie_providers") {
+            MovieProvidersScreen(
+                onBackClick = { navController.popBackStack() },
+                region = selectedRegion,
+                providers = movieProviders,
+                onProvidersChanged = onMovieProvidersChanged,
+                onGetServicesForRegion = onGetServicesForRegion
             )
         }
     }

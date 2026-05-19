@@ -1,13 +1,15 @@
 package com.example.tangible.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -27,10 +29,39 @@ enum class MusicSpeaker(val displayName: String) {
     CHROMECAST("Chromecast")
 }
 
+private val REGIONS = listOf(
+    "AU" to "Australia",
+    "AT" to "Austria",
+    "BE" to "Belgium",
+    "BR" to "Brazil",
+    "CA" to "Canada",
+    "DK" to "Denmark",
+    "FI" to "Finland",
+    "FR" to "France",
+    "DE" to "Germany",
+    "IN" to "India",
+    "IE" to "Ireland",
+    "IT" to "Italy",
+    "JP" to "Japan",
+    "MX" to "Mexico",
+    "NL" to "Netherlands",
+    "NZ" to "New Zealand",
+    "NO" to "Norway",
+    "PL" to "Poland",
+    "PT" to "Portugal",
+    "ES" to "Spain",
+    "SE" to "Sweden",
+    "CH" to "Switzerland",
+    "TR" to "Turkey",
+    "GB" to "United Kingdom",
+    "US" to "United States"
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBackClick: () -> Unit,
+    onMovieProvidersClick: () -> Unit,
     selectedService: MusicService,
     onServiceSelected: (MusicService) -> Unit,
     selectedSpeaker: MusicSpeaker,
@@ -44,8 +75,33 @@ fun SettingsScreen(
     onChromecastDeviceSelected: (String) -> Unit,
     onRefreshChromecast: () -> Unit,
     isSpotifyAuthorized: Boolean,
-    onConnectSpotify: () -> Unit
+    onConnectSpotify: () -> Unit,
+    selectedRegion: String,
+    onRegionSelected: (String) -> Unit
 ) {
+    var showRegionWarning by remember { mutableStateOf<String?>(null) }
+
+    if (showRegionWarning != null) {
+        AlertDialog(
+            onDismissRequest = { showRegionWarning = null },
+            title = { Text("Change region?") },
+            text = { Text("Changing the region will clear your custom movie provider preferences.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onRegionSelected(showRegionWarning!!)
+                    showRegionWarning = null
+                }) {
+                    Text("Change")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRegionWarning = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -63,7 +119,9 @@ fun SettingsScreen(
                 .padding(padding)
                 .padding(16.dp)
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
         ) {
+            // ... (rest of the content)
             Text(
                 text = "Default music service",
                 style = MaterialTheme.typography.titleMedium,
@@ -285,6 +343,63 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "Movie streaming region",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            var regionExpanded by remember { mutableStateOf(false) }
+            val selectedRegionName = REGIONS.find { it.first == selectedRegion }?.second ?: selectedRegion
+
+            ExposedDropdownMenuBox(
+                expanded = regionExpanded,
+                onExpandedChange = { regionExpanded = it },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = "$selectedRegionName ($selectedRegion)",
+                    onValueChange = {},
+                    readOnly = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = regionExpanded) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                )
+                ExposedDropdownMenu(
+                    expanded = regionExpanded,
+                    onDismissRequest = { regionExpanded = false }
+                ) {
+                    REGIONS.forEach { (code, name) ->
+                        DropdownMenuItem(
+                            text = { Text("$name ($code)") },
+                            onClick = {
+                                if (code != selectedRegion) {
+                                    showRegionWarning = code
+                                }
+                                regionExpanded = false
+                            },
+                            contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Button(
+                onClick = onMovieProvidersClick,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Movie providers")
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
