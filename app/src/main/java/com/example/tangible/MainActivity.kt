@@ -2,6 +2,7 @@ package com.example.tangible
 
 import android.app.PendingIntent
 import android.app.SearchManager
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
@@ -65,6 +66,17 @@ data class TagMediaUris(
 )
 
 const val SONOS_ALL_SPEAKERS = "ALL_SPEAKERS"
+
+private val STREAMING_PACKAGES = mapOf(
+    "netflix.com" to "com.netflix.mediaclient",
+    "primevideo.com" to "com.amazon.avod.thirdpartyclient",
+    "disneyplus.com" to "com.disney.disneyplus",
+    "play.max.com" to "com.wbd.stream",
+    "hulu.com" to "com.hulu.plus",
+    "tv.apple.com" to "com.apple.atve.androidtv.appletv",
+    "paramountplus.com" to "com.cbs.app",
+    "peacocktv.com" to "com.peacocktv.peacockandroid"
+)
 
 class MainActivity : ComponentActivity() {
     private var nfcAdapter: NfcAdapter? = null
@@ -512,11 +524,23 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun playMovie(url: String) {
+        val host = Uri.parse(url).host?.lowercase() ?: ""
+        val targetPackage = STREAMING_PACKAGES.entries.firstOrNull { host.endsWith(it.key) }?.value
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            targetPackage?.let { setPackage(it) }
         }
         try {
             startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            // App not installed — retry without package constraint so the system can handle it
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                })
+            } catch (e2: Exception) {
+                Toast.makeText(this, "No app found to open this streaming service", Toast.LENGTH_SHORT).show()
+            }
         } catch (e: Exception) {
             Toast.makeText(this, "No app found to open this streaming service", Toast.LENGTH_SHORT).show()
         }
