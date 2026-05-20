@@ -45,11 +45,17 @@ class ChromecastDiscovery(private val context: Context) {
                     }
                     override fun onServiceResolved(info: NsdServiceInfo) {
                         val host = info.host?.hostAddress ?: return
-                        // "md" attribute is the device model — first/second/third-gen Chromecasts
-                        // don't run Android TV and have no ADB support, so skip them.
+                        // "md" attribute is the device model. Only keep Android TV / Google TV
+                        // devices — everything else (old Chromecasts, Nest speakers/displays,
+                        // Google Home devices) doesn't run Android TV and has no ADB support.
                         val model = info.attributes["md"]?.let { String(it) } ?: ""
                         if (model.equals("Chromecast", ignoreCase = true) ||
-                            model.equals("Chromecast Ultra", ignoreCase = true)) {
+                            model.equals("Chromecast Ultra", ignoreCase = true) ||
+                            model.equals("Chromecast Audio", ignoreCase = true) ||
+                            model.startsWith("Google Nest", ignoreCase = true) ||
+                            model.startsWith("Google Home", ignoreCase = true) ||
+                            model.startsWith("Google Wifi", ignoreCase = true) ||
+                            model.startsWith("Nest Wifi", ignoreCase = true)) {
                             Log.d(TAG, "Skipping non-Android-TV device: $model")
                             return
                         }
