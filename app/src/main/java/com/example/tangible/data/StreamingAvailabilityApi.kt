@@ -36,6 +36,7 @@ data class ServiceImagesDto(
 )
 
 data class ShowApiResponse(
+    @SerializedName("imdbId") val imdbId: String?,
     @SerializedName("streamingOptions") val streamingOptions: Map<String, List<StreamingOptionDto>>
 )
 

@@ -71,12 +71,17 @@ private val SERVICE_CONFIGS: Map<String, ServiceConfig> = mapOf(
         shortKey = "pk", displayName = "Peacock",
         extractId = { url -> Regex("/asset/([a-f0-9\\-]{36})").find(url)?.groupValues?.get(1) },
         buildLink = { id -> "https://www.peacocktv.com/watch/asset/$id" }
+    ),
+    "stremio" to ServiceConfig(
+        shortKey = "sm", displayName = "Stremio",
+        extractId = { _ -> null }, // not populated from API; IMDb ID is injected directly
+        buildLink = { id -> "stremio://detail/movie/$id" }
     )
 )
 
-// Insertion order matches priority: Netflix first, then major services
+// Insertion order matches priority: Netflix first, then major services; Stremio last as universal fallback
 private val SERVICE_PRIORITY: List<String> =
-    listOf("netflix", "prime", "disney", "hbo", "hulu", "apple", "paramount", "peacock")
+    listOf("netflix", "prime", "disney", "hbo", "hulu", "apple", "paramount", "peacock", "stremio")
 
 // Short-key → config for read-time URL resolution
 private val SERVICE_CONFIG_BY_KEY: Map<String, ServiceConfig> =
@@ -113,11 +118,16 @@ class StreamingAvailabilityRepository(private val rapidApiKey: String) {
     }
 
     suspend fun getServicesForRegion(region: String): List<MovieProvider> {
+        val stremio = MovieProvider(
+            id = "stremio",
+            name = "Stremio",
+            iconUrl = "https://www.stremio.com/website/stremio-logo-small-alt.png"
+        )
         return try {
             val countries = api.getCountries()
-            val country = countries[region.lowercase()] ?: return emptyList()
-            country.services
-                .filter { it.supportedStreamingTypes["addon"] != true }
+            val country = countries[region.lowercase()] ?: return listOf(stremio)
+            val regional = country.services
+                .filter { service -> service.supportedStreamingTypes.any { (type, enabled) -> enabled && type != "addon" } }
                 .map { service ->
                     MovieProvider(
                         id = service.id,
@@ -125,48 +135,67 @@ class StreamingAvailabilityRepository(private val rapidApiKey: String) {
                         iconUrl = service.images.lightThemeImage
                     )
                 }
+            regional + stremio
         } catch (e: Exception) {
-            emptyList()
+            listOf(stremio)
         }
     }
 
     suspend fun getMovieStreamingResult(tmdbId: Int, region: String): MovieStreamingResult {
-        if (rapidApiKey.isBlank()) return MovieStreamingResult(emptyList(), emptySet(), "", 0)
-        return try {
-            val response = api.getShow("movie/$tmdbId", region.lowercase())
-            val typeOrder = listOf("subscription", "free", "rent", "buy")
-            val filteredOptions = (response.streamingOptions[region.lowercase()] ?: emptyList())
-                .filter { it.type != "addon" }
-                .groupBy { it.service.id }
-                .map { (_, dtos) ->
-                    val bestDto = dtos.minBy { typeOrder.indexOf(it.type).let { i -> if (i < 0) Int.MAX_VALUE else i } }
-                    val allTypes = dtos.map { it.type }
-                        .distinct()
-                        .sortedBy { typeOrder.indexOf(it).let { i -> if (i < 0) Int.MAX_VALUE else i } }
+        val typeOrder = listOf("subscription", "free", "rent", "buy")
 
-                    StreamingOption(
-                        serviceId = bestDto.service.id,
-                        serviceName = bestDto.service.name,
-                        type = bestDto.type,
-                        link = bestDto.link,
-                        allTypes = allTypes
-                    )
-                }
-                .sortedWith(compareBy(
-                    { SERVICE_PRIORITY.indexOf(it.serviceId).let { i -> if (i < 0) Int.MAX_VALUE else i } },
-                    { it.serviceName }
-                ))
-
-            buildResult(tmdbId, region, filteredOptions)
-        } catch (e: Exception) {
-            MovieStreamingResult(emptyList(), emptySet(), "", 0)
+        var imdbId: String? = null
+        val streamingOptions: List<StreamingOption> = if (rapidApiKey.isNotBlank()) {
+            try {
+                val response = api.getShow("movie/$tmdbId", region.lowercase())
+                imdbId = response.imdbId
+                (response.streamingOptions[region.lowercase()] ?: emptyList())
+                    .filter { it.type != "addon" }
+                    .groupBy { it.service.id }
+                    .map { (_, dtos) ->
+                        val bestDto = dtos.minBy { typeOrder.indexOf(it.type).let { i -> if (i < 0) Int.MAX_VALUE else i } }
+                        val allTypes = dtos.map { it.type }
+                            .distinct()
+                            .sortedBy { typeOrder.indexOf(it).let { i -> if (i < 0) Int.MAX_VALUE else i } }
+                        StreamingOption(
+                            serviceId = bestDto.service.id,
+                            serviceName = bestDto.service.name,
+                            type = bestDto.type,
+                            link = bestDto.link,
+                            allTypes = allTypes
+                        )
+                    }
+                    .sortedWith(compareBy(
+                        { SERVICE_PRIORITY.indexOf(it.serviceId).let { i -> if (i < 0) Int.MAX_VALUE else i } },
+                        { it.serviceName }
+                    ))
+            } catch (e: Exception) {
+                emptyList()
+            }
+        } else {
+            emptyList()
         }
+
+        val allOptions = if (imdbId != null) {
+            streamingOptions + StreamingOption(
+                serviceId = "stremio",
+                serviceName = "Stremio",
+                type = "free",
+                link = "stremio://detail/movie/$imdbId",
+                allTypes = listOf("free")
+            )
+        } else {
+            streamingOptions
+        }
+
+        return buildResult(tmdbId, region, allOptions, imdbId)
     }
 
     private fun buildResult(
         tmdbId: Int,
         region: String,
-        options: List<StreamingOption>
+        options: List<StreamingOption>,
+        imdbId: String? = null
     ): MovieStreamingResult {
         val base = "tangible://movie?tmdb_id=$tmdbId&r=${region.uppercase()}"
         val sb = StringBuilder(base)
@@ -174,6 +203,7 @@ class StreamingAvailabilityRepository(private val rapidApiKey: String) {
 
         for (option in options) {
             if (option.serviceId in encoded) continue // one entry per service (best type wins)
+            if (option.serviceId == "stremio") continue // added separately below
             val config = SERVICE_CONFIGS[option.serviceId] ?: continue
             val contentId = config.extractId(option.link) ?: continue
             val typeCode = when (option.type) {
@@ -187,6 +217,15 @@ class StreamingAvailabilityRepository(private val rapidApiKey: String) {
             if (sb.length + param.length > NFC_NTAG215_BYTES) continue
             sb.append(param)
             encoded.add(option.serviceId)
+        }
+
+        if (imdbId != null) {
+            val stremioKey = SERVICE_CONFIGS["stremio"]!!.shortKey
+            val param = "&$stremioKey=${Uri.encode(imdbId)}"
+            if (sb.length + param.length <= NFC_NTAG215_BYTES) {
+                sb.append(param)
+                encoded.add("stremio")
+            }
         }
 
         val tagUrl = sb.toString()

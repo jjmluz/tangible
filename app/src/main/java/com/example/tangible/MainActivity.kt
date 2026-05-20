@@ -455,8 +455,8 @@ class MainActivity : ComponentActivity() {
                     candidates
                         .filter { it.second in enabledIds }
                         .sortedWith(compareBy(
-                            { typePriority.indexOf(it.third.typeCode).let { i -> if (i < 0) Int.MAX_VALUE else i } },
-                            { enabledIds.indexOf(it.second) }
+                            { enabledIds.indexOf(it.second) },
+                            { typePriority.indexOf(it.third.typeCode).let { i -> if (i < 0) Int.MAX_VALUE else i } }
                         ))
                         .firstOrNull()?.third?.url
                 } else {
@@ -524,9 +524,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun playMovie(url: String) {
-        val host = Uri.parse(url).host?.lowercase() ?: ""
-        val targetPackage = STREAMING_PACKAGES.entries.firstOrNull { host.endsWith(it.key) }?.value
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+        val uri = Uri.parse(url)
+        val targetPackage = if (uri.scheme == "stremio") {
+            "com.stremio.one"
+        } else {
+            val host = uri.host?.lowercase() ?: ""
+            STREAMING_PACKAGES.entries.firstOrNull { host.endsWith(it.key) }?.value
+        }
+        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             targetPackage?.let { setPackage(it) }
         }
@@ -535,7 +540,7 @@ class MainActivity : ComponentActivity() {
         } catch (e: ActivityNotFoundException) {
             // App not installed — retry without package constraint so the system can handle it
             try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                startActivity(Intent(Intent.ACTION_VIEW, uri).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 })
             } catch (e2: Exception) {
