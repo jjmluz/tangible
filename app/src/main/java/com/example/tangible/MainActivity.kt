@@ -4,7 +4,6 @@ import android.app.PendingIntent
 import android.app.SearchManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.content.IntentFilter
 import android.net.Uri
 import android.nfc.NdefMessage
 import android.nfc.NdefRecord
@@ -27,19 +26,17 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import android.widget.Toast
+import com.example.tangible.data.AdbRepository
 import com.example.tangible.data.AppleMusicRepository
 import com.example.tangible.data.ChromecastDevice
 import com.example.tangible.data.ChromecastDiscovery
-import com.example.tangible.data.ChromecastRepository
 import com.example.tangible.data.DiscogsRepository
 import com.example.tangible.data.DiscogsSearchResult
 import com.example.tangible.data.MovieProvider
 import com.example.tangible.data.MovieStreamingResult
-import com.example.tangible.data.ResolvedService
 import com.example.tangible.data.SonosDiscovery
 import com.example.tangible.data.SonosRepository
 import com.example.tangible.data.SonosSpeaker
-import com.example.tangible.data.SpotifyAuthRepository
 import com.example.tangible.data.SpotifyRepository
 import com.example.tangible.data.StreamingAvailabilityRepository
 import com.example.tangible.data.TmdbMovieResult
@@ -59,7 +56,6 @@ import com.spotify.android.appremote.api.SpotifyAppRemote
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// Data class to hold all resolved URIs for a tag
 data class TagMediaUris(
     val spotifyTrack: String? = null,
     val spotifyAlbum: String? = null,
@@ -97,7 +93,7 @@ class MainActivity : ComponentActivity() {
     private var chromecastDevices by mutableStateOf<List<ChromecastDevice>>(emptyList())
     private var selectedChromecastId by mutableStateOf<String?>(null)
     private var selectedChromecastName by mutableStateOf<String?>(null)
-    private var isSpotifyAuthorized by mutableStateOf(false)
+    private var selectedChromecastHost: String? = null
     private var region by mutableStateOf("US")
     private var movieProviders by mutableStateOf<List<MovieProvider>>(emptyList())
 
@@ -106,12 +102,10 @@ class MainActivity : ComponentActivity() {
     private val discogsRepository by lazy { DiscogsRepository(discogsToken) }
     private val tmdbApiKey = "REMOVED_SECRET"
     private val tmdbRepository by lazy { TmdbRepository(tmdbApiKey) }
-    // Register at https://rapidapi.com/movie-of-the-night-movie-of-the-night-default/api/streaming-availability
     private val streamingApiKey = "REMOVED_SECRET"
     private val streamingRepository by lazy { StreamingAvailabilityRepository(streamingApiKey) }
     private val clientId = "REMOVED_SECRET"
     private val clientSecret = "REMOVED_SECRET"
-    private val redirectUri = "com.example.tangible://callback"
     private val spotifyRepository by lazy { SpotifyRepository(clientId, clientSecret) }
     private val youtubeApiKey = "REMOVED_SECRET"
     private val youtubeRepository by lazy { YouTubeRepository(youtubeApiKey) }
@@ -119,17 +113,14 @@ class MainActivity : ComponentActivity() {
     private val sonosDiscovery by lazy { SonosDiscovery(this) }
     private val sonosRepository by lazy { SonosRepository() }
     private val chromecastDiscovery by lazy { ChromecastDiscovery(this) }
-    private val chromecastRepository by lazy { ChromecastRepository(this) }
-    private val spotifyAuthRepository by lazy {
-        SpotifyAuthRepository(this, clientId, clientSecret, redirectUri)
-    }
+    private val adbRepository by lazy { AdbRepository(this) }
 
     private var spotifyAppRemote: SpotifyAppRemote? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
-        
+
         // Load settings
         val serviceValue = prefs.getString("selected_service", MusicService.SPOTIFY.name)
         selectedService = MusicService.entries.find { it.name == serviceValue } ?: MusicService.SPOTIFY
@@ -138,11 +129,10 @@ class MainActivity : ComponentActivity() {
         selectedSonosIp = prefs.getString("selected_sonos_ip", null)
         selectedChromecastId = prefs.getString("selected_chromecast_id", null)
         selectedChromecastName = prefs.getString("selected_chromecast_name", null)
-        isSpotifyAuthorized = spotifyAuthRepository.isAuthorized
+        selectedChromecastHost = prefs.getString("selected_chromecast_host", null)
         region = prefs.getString("region", "US") ?: "US"
         loadMovieProviders()
 
-        // Handle deep link if app was started by it
         intent?.let { handleIntent(it) }
 
         setContent {
@@ -181,14 +171,16 @@ class MainActivity : ComponentActivity() {
                         onChromecastDeviceSelected = { id ->
                             selectedChromecastId = id
                             prefs.edit().putString("selected_chromecast_id", id).apply()
-                            chromecastDevices.firstOrNull { it.id == id }?.name?.let { name ->
-                                selectedChromecastName = name
-                                prefs.edit().putString("selected_chromecast_name", name).apply()
+                            chromecastDevices.firstOrNull { it.id == id }?.let { device ->
+                                selectedChromecastName = device.name
+                                selectedChromecastHost = device.host
+                                prefs.edit()
+                                    .putString("selected_chromecast_name", device.name)
+                                    .putString("selected_chromecast_host", device.host)
+                                    .apply()
                             }
                         },
                         onRefreshChromecast = { refreshChromecastDevices() },
-                        isSpotifyAuthorized = isSpotifyAuthorized,
-                        onConnectSpotify = { openSpotifyAuth() },
                         onStartWriting = { url ->
                             dataToWrite = url
                             isWritingMode = true
@@ -199,15 +191,9 @@ class MainActivity : ComponentActivity() {
                             dataToWrite = null
                             writeError = null
                         },
-                        onSearchAlbums = { query ->
-                            discogsRepository.searchAlbums(query)
-                        },
-                        onSearchMovies = { query ->
-                            tmdbRepository.searchMovies(query)
-                        },
-                        onGetMovieStreaming = { tmdbId ->
-                            streamingRepository.getMovieStreamingResult(tmdbId, region)
-                        },
+                        onSearchAlbums = { query -> discogsRepository.searchAlbums(query) },
+                        onSearchMovies = { query -> tmdbRepository.searchMovies(query) },
+                        onGetMovieStreaming = { tmdbId -> streamingRepository.getMovieStreamingResult(tmdbId, region) },
                         selectedRegion = region,
                         onRegionSelected = { newRegion ->
                             if (newRegion != region) {
@@ -215,7 +201,6 @@ class MainActivity : ComponentActivity() {
                                 prefs.edit().putString("region", newRegion).apply()
                                 movieProviders = emptyList()
                                 saveMovieProviders(emptyList())
-                                // Persist cleared state immediately
                                 prefs.edit().remove("movie_providers").apply()
                             }
                         },
@@ -230,7 +215,6 @@ class MainActivity : ComponentActivity() {
 
                             val ytmUri = youtubeRepository.searchAlbum(title, artist)
                                 ?: "https://music.youtube.com/search?q=${Uri.encode(discogsAlbum.title)}"
-
                             val appleMusicUri = appleMusicRepository.searchAlbum(title, artist)
                                 ?: "https://music.apple.com/search?term=${Uri.encode(discogsAlbum.title)}"
 
@@ -246,9 +230,7 @@ class MainActivity : ComponentActivity() {
                             movieProviders = providers
                             saveMovieProviders(providers)
                         },
-                        onGetServicesForRegion = { reg ->
-                            streamingRepository.getServicesForRegion(reg)
-                        }
+                        onGetServicesForRegion = { reg -> streamingRepository.getServicesForRegion(reg) }
                     )
 
                     if (showSuccessDialog) {
@@ -257,9 +239,7 @@ class MainActivity : ComponentActivity() {
                             title = { Text("Success") },
                             text = { Text("Deep link successfully written to tag!") },
                             confirmButton = {
-                                TextButton(onClick = { showSuccessDialog = false }) {
-                                    Text("OK")
-                                }
+                                TextButton(onClick = { showSuccessDialog = false }) { Text("OK") }
                             }
                         )
                     }
@@ -269,8 +249,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun saveMovieProviders(providers: List<MovieProvider>) {
-        val json = gson.toJson(providers)
-        prefs.edit().putString("movie_providers", json).apply()
+        prefs.edit().putString("movie_providers", gson.toJson(providers)).apply()
     }
 
     private fun loadMovieProviders() {
@@ -286,7 +265,6 @@ class MainActivity : ComponentActivity() {
     private fun refreshSonosSpeakers() {
         lifecycleScope.launch {
             sonosSpeakers = sonosDiscovery.discoverSpeakers()
-            // Diagnostics: if a speaker is selected, log what it's playing
             val ip = selectedSonosIp
             if (ip != null && ip != SONOS_ALL_SPEAKERS) {
                 sonosRepository.getPlayingInfo(ip)
@@ -301,46 +279,22 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun playOnChromecast(spotifyUri: String) {
-        val deviceId = selectedChromecastId
-        if (deviceId == null) {
-            Toast.makeText(this, "Please select a Chromecast device in Settings", Toast.LENGTH_LONG).show()
-            return
-        }
-        if (!spotifyAuthRepository.isAuthorized) {
-            Toast.makeText(this, "Connect your Spotify account in Settings first", Toast.LENGTH_LONG).show()
-            openSpotifyAuth()
+        val host = chromecastDevices.firstOrNull { it.id == selectedChromecastId }?.host
+            ?: selectedChromecastHost
+        if (host == null) {
+            Toast.makeText(this, "Please select a Google TV device in Settings", Toast.LENGTH_LONG).show()
             return
         }
         lifecycleScope.launch {
-            var device = chromecastDevices.firstOrNull { it.id == deviceId }
-                ?: selectedChromecastName?.let { ChromecastDevice(id = deviceId, name = it, host = "", port = 0) }
-
-            if (device == null) {
-                val discovered = chromecastDiscovery.discoverDevices()
-                chromecastDevices = discovered
-                device = discovered.firstOrNull { it.id == deviceId }
-            }
-
-            if (device == null) {
-                Toast.makeText(this@MainActivity, "Selected Chromecast not found — tap refresh in Settings", Toast.LENGTH_LONG).show()
-                return@launch
-            }
-
-            Toast.makeText(this@MainActivity, "Connecting to ${device.name}...", Toast.LENGTH_SHORT).show()
-            val ok = chromecastRepository.playSpotifyUri(device, spotifyUri, spotifyAuthRepository)
+            Toast.makeText(this@MainActivity, "Launching Spotify on TV…", Toast.LENGTH_SHORT).show()
+            val ok = adbRepository.launchSpotify(host, spotifyUri)
             if (!ok) {
-                Toast.makeText(this@MainActivity, "Could not play on Chromecast", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this@MainActivity,
+                    "Could not launch Spotify. Enable ADB debugging in Developer Options on your Google TV.",
+                    Toast.LENGTH_LONG
+                ).show()
             }
-        }
-    }
-
-    private fun openSpotifyAuth() {
-        val url = spotifyAuthRepository.buildAuthUrl()
-        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        try { startActivity(browserIntent) } catch (e: Exception) {
-            Toast.makeText(this, "No browser found to open Spotify login", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -351,26 +305,21 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        spotifyAppRemote?.let {
-            SpotifyAppRemote.disconnect(it)
-        }
+        spotifyAppRemote?.let { SpotifyAppRemote.disconnect(it) }
     }
 
     private fun connectToSpotify(onConnected: () -> Unit = {}) {
         if (clientId == "YOUR_CLIENT_ID") return
-
         val connectionParams = ConnectionParams.Builder(clientId)
-            .setRedirectUri(redirectUri)
+            .setRedirectUri("com.example.tangible://callback")
             .showAuthView(true)
             .build()
-
         SpotifyAppRemote.connect(this, connectionParams, object : Connector.ConnectionListener {
             override fun onConnected(appRemote: SpotifyAppRemote) {
                 spotifyAppRemote = appRemote
                 Log.d("Tangible", "Connected to Spotify")
                 onConnected()
             }
-
             override fun onFailure(throwable: Throwable) {
                 Log.e("Tangible", "Spotify connection failed: ${throwable.message}")
             }
@@ -399,7 +348,6 @@ class MainActivity : ComponentActivity() {
 
         Log.d("Tangible", "Handling intent: action=$action, data=$data, isWritingMode=$isWritingMode")
 
-        // Handle writing mode first if it's an NFC action
         if (isWritingMode && (
                 NfcAdapter.ACTION_TAG_DISCOVERED == action ||
                 NfcAdapter.ACTION_NDEF_DISCOVERED == action ||
@@ -411,28 +359,8 @@ class MainActivity : ComponentActivity() {
                 @Suppress("DEPRECATION")
                 intent.getParcelableExtra(NfcAdapter.EXTRA_TAG)
             }
-            if (tag != null) {
-                writeToTag(tag, dataToWrite ?: "")
-            } else {
-                Log.e("Tangible", "NFC Tag extra is null")
-            }
-            return
-        }
-
-        // Handle Spotify OAuth callback
-        if (data?.scheme == "com.example.tangible" && data.host == "callback") {
-            val code = data.getQueryParameter("code")
-            if (code != null) {
-                lifecycleScope.launch {
-                    val success = spotifyAuthRepository.handleAuthCode(code)
-                    isSpotifyAuthorized = success
-                    if (success) {
-                        Toast.makeText(this@MainActivity, "Spotify connected", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(this@MainActivity, "Spotify login failed", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
+            if (tag != null) writeToTag(tag, dataToWrite ?: "")
+            else Log.e("Tangible", "NFC Tag extra is null")
             return
         }
 
@@ -457,7 +385,6 @@ class MainActivity : ComponentActivity() {
                         val resolved = StreamingAvailabilityRepository.resolveService(key, encoded) ?: return@mapNotNull null
                         Triple(key, providerId, resolved)
                     }
-
                 movieToPlay = if (movieProviders.isNotEmpty()) {
                     val enabledIds = enabledProviders.map { it.id }
                     candidates
@@ -476,11 +403,8 @@ class MainActivity : ComponentActivity() {
                 val pathSegments = uri.pathSegments
                 if (pathSegments.size >= 2) {
                     val spotifyUri = "spotify:${pathSegments[0]}:${pathSegments[1]}"
-                    uris = if (pathSegments[0] == "album") {
-                        TagMediaUris(spotifyAlbum = spotifyUri)
-                    } else {
-                        TagMediaUris(spotifyTrack = spotifyUri)
-                    }
+                    uris = if (pathSegments[0] == "album") TagMediaUris(spotifyAlbum = spotifyUri)
+                           else TagMediaUris(spotifyTrack = spotifyUri)
                 }
             }
         }
@@ -492,10 +416,7 @@ class MainActivity : ComponentActivity() {
             rawMsgs?.forEach {
                 val msg = it as NdefMessage
                 msg.records.forEach { record ->
-                    try {
-                        val uri = record.toUri()
-                        if (uri != null) parseTangibleUri(uri)
-                    } catch (e: Exception) {}
+                    try { record.toUri()?.let { uri -> parseTangibleUri(uri) } } catch (e: Exception) { }
                 }
             }
         }
@@ -509,50 +430,38 @@ class MainActivity : ComponentActivity() {
             Log.d("Tangible", "Action: selectedService=$selectedService, selectedSpeaker=$selectedSpeaker, uris=$uris")
             when {
                 selectedService == MusicService.SPOTIFY && selectedSpeaker == MusicSpeaker.THIS_DEVICE -> {
-                    val toPlay = uris.spotifyTrack ?: uris.spotifyAlbum
-                    Log.d("Tangible", "Playing on Spotify (this device): $toPlay")
-                    toPlay?.let { playOnSpotify(it) }
+                    (uris.spotifyTrack ?: uris.spotifyAlbum)?.let { playOnSpotify(it) }
                 }
                 selectedService == MusicService.YOUTUBE_MUSIC && selectedSpeaker == MusicSpeaker.THIS_DEVICE -> {
-                    Log.d("Tangible", "Playing on YouTube Music: ${uris.ytm}")
                     uris.ytm?.let { playOnYouTubeMusic(it) }
                 }
                 selectedService == MusicService.APPLE_MUSIC && selectedSpeaker == MusicSpeaker.THIS_DEVICE -> {
-                    Log.d("Tangible", "Playing on Apple Music: ${uris.appleMusic}")
                     uris.appleMusic?.let { playOnAppleMusic(it) }
                 }
                 selectedService == MusicService.SPOTIFY && selectedSpeaker == MusicSpeaker.SONOS -> {
-                    val toPlay = uris.spotifyAlbum ?: uris.spotifyTrack
-                    Log.d("Tangible", "Playing on Sonos (Spotify): $toPlay")
-                    toPlay?.let { playOnSonos(it) }
+                    (uris.spotifyAlbum ?: uris.spotifyTrack)?.let { playOnSonos(it) }
                 }
                 selectedService == MusicService.YOUTUBE_MUSIC && selectedSpeaker == MusicSpeaker.SONOS -> {
                     Toast.makeText(this, "YouTube Music + Sonos not yet implemented", Toast.LENGTH_SHORT).show()
                 }
                 selectedService == MusicService.APPLE_MUSIC && selectedSpeaker == MusicSpeaker.SONOS -> {
-                    Log.d("Tangible", "Playing on Sonos (Apple Music): ${uris.appleMusic}")
                     uris.appleMusic?.let { playOnSonos(it) }
                 }
                 selectedService == MusicService.SPOTIFY && selectedSpeaker == MusicSpeaker.CHROMECAST -> {
-                    val toPlay = uris.spotifyAlbum ?: uris.spotifyTrack
-                    Log.d("Tangible", "Playing on Chromecast (Spotify): $toPlay")
-                    toPlay?.let { playOnChromecast(it) }
+                    (uris.spotifyAlbum ?: uris.spotifyTrack)?.let { playOnChromecast(it) }
                 }
                 selectedService == MusicService.APPLE_MUSIC && selectedSpeaker == MusicSpeaker.CHROMECAST -> {
-                    Log.d("Tangible", "Playing on Chromecast (Apple Music): ${uris.appleMusic}")
                     uris.appleMusic?.let {
                         playOnAppleMusic(it)
                         Toast.makeText(this, "Please tap the Cast button in Apple Music", Toast.LENGTH_LONG).show()
                     }
                 }
-                else -> {
-                    Log.w("Tangible", "No action for service $selectedService and speaker $selectedSpeaker")
-                }
+                else -> Log.w("Tangible", "No action for service $selectedService and speaker $selectedSpeaker")
             }
             return
-        } else {
-            Log.d("Tangible", "No URIs found or in writing mode. uris=$uris, isWritingMode=$isWritingMode")
         }
+
+        Log.d("Tangible", "No URIs found or in writing mode. uris=$uris, isWritingMode=$isWritingMode")
     }
 
     private fun playMovie(url: String) {
@@ -570,11 +479,8 @@ class MainActivity : ComponentActivity() {
         try {
             startActivity(intent)
         } catch (e: ActivityNotFoundException) {
-            // App not installed — retry without package constraint so the system can handle it
             try {
-                startActivity(Intent(Intent.ACTION_VIEW, uri).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                })
+                startActivity(Intent(Intent.ACTION_VIEW, uri).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
             } catch (e2: Exception) {
                 Toast.makeText(this, "No app found to open this streaming service", Toast.LENGTH_SHORT).show()
             }
@@ -589,86 +495,58 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "Please select a Sonos speaker in Settings", Toast.LENGTH_LONG).show()
             return
         }
-        
         lifecycleScope.launch {
             val finalUri = if (selectedService == MusicService.SPOTIFY) {
-                if (musicUri.startsWith("spotify:")) {
-                    musicUri
-                } else {
-                    val results = spotifyRepository.searchAlbums(musicUri)
-                    results.firstOrNull()?.uri
-                }
+                if (musicUri.startsWith("spotify:")) musicUri
+                else spotifyRepository.searchAlbums(musicUri).firstOrNull()?.uri
             } else {
-                musicUri // For Apple Music, we already have the URL
+                musicUri
             }
-
             if (finalUri == null) {
                 Log.e("Tangible", "Could not resolve URI for $musicUri")
                 return@launch
             }
-
             if (ip == SONOS_ALL_SPEAKERS) {
-                // Always rediscover to get latest topology when broadcasting
                 val discovered = sonosDiscovery.discoverSpeakers()
-                if (discovered.isNotEmpty()) {
-                    sonosSpeakers = discovered
-                }
-                
+                if (discovered.isNotEmpty()) sonosSpeakers = discovered
                 if (sonosSpeakers.isEmpty()) {
                     Toast.makeText(this@MainActivity, "No Sonos speakers found", Toast.LENGTH_SHORT).show()
                 } else {
-                    Log.d("Tangible", "Found ${sonosSpeakers.size} speakers for broadcast")
                     Toast.makeText(this@MainActivity, "Grouping ${sonosSpeakers.size} speakers and playing...", Toast.LENGTH_SHORT).show()
-                    
                     val master = sonosSpeakers[0]
                     val masterUuid = sonosRepository.getSpeakerUuid(master.ip)
-                    Log.d("Tangible", "Master speaker: ${master.name} (${master.ip}), UUID: $masterUuid")
-                    
                     if (masterUuid != null) {
-                        // 1. Make the first speaker the coordinator
                         sonosRepository.becomeMaster(master.ip)
                         delay(500)
-
-                        // 2. Tell all other speakers to stop and join the master
                         sonosSpeakers.drop(1).forEach { slave ->
-                            Log.d("Tangible", "Preparing slave: ${slave.name} (${slave.ip})")
                             launch {
                                 sonosRepository.stop(slave.ip)
                                 delay(200)
-                                val success = sonosRepository.joinGroup(slave.ip, masterUuid)
-                                Log.d("Tangible", "Join ${slave.name} result: $success")
+                                sonosRepository.joinGroup(slave.ip, masterUuid)
                             }
                         }
-                        // 3. Wait for the topology to stabilize
                         delay(3000)
                     }
-                    if (selectedService == MusicService.APPLE_MUSIC) {
-                        sonosRepository.playAppleMusicUri(master.ip, finalUri)
-                    } else {
-                        sonosRepository.playSpotifyUri(master.ip, finalUri)
-                    }
+                    if (selectedService == MusicService.APPLE_MUSIC) sonosRepository.playAppleMusicUri(master.ip, finalUri)
+                    else sonosRepository.playSpotifyUri(master.ip, finalUri)
                 }
             } else {
-                if (selectedService == MusicService.APPLE_MUSIC) {
-                    sonosRepository.playAppleMusicUri(ip, finalUri)
-                } else {
-                    sonosRepository.playSpotifyUri(ip, finalUri)
-                }
+                if (selectedService == MusicService.APPLE_MUSIC) sonosRepository.playAppleMusicUri(ip, finalUri)
+                else sonosRepository.playSpotifyUri(ip, finalUri)
             }
         }
     }
 
     private fun playOnAppleMusic(url: String) {
         try {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-            intent.setPackage("com.apple.android.music")
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(intent)
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                setPackage("com.apple.android.music")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
         } catch (e: Exception) {
-            // Fallback to browser if app not installed
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(intent)
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
         }
     }
 
@@ -690,7 +568,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            try { startActivity(intent) } catch (e: Exception) {}
+            try { startActivity(intent) } catch (e: Exception) { }
             connectToSpotify {
                 lifecycleScope.launch {
                     delay(1000)
@@ -718,7 +596,6 @@ class MainActivity : ComponentActivity() {
             this, 0, intent,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
         )
-        // Passing null filters and techLists makes foreground dispatch catch all NFC intents
         nfcAdapter?.enableForegroundDispatch(this, pendingIntent, null, null)
     }
 
@@ -731,22 +608,13 @@ class MainActivity : ComponentActivity() {
         val ndef = Ndef.get(tag)
         val record = NdefRecord.createUri(data)
         val records = mutableListOf(record)
-        if (data.startsWith("tangible:")) {
-            records.add(NdefRecord.createApplicationRecord(packageName))
-        }
+        if (data.startsWith("tangible:")) records.add(NdefRecord.createApplicationRecord(packageName))
         val message = NdefMessage(records.toTypedArray())
-
         try {
             if (ndef != null) {
                 ndef.connect()
-                if (!ndef.isWritable) {
-                    writeError = "Tag is read-only"
-                    return
-                }
-                if (ndef.maxSize < message.toByteArray().size) {
-                    writeError = "Tag capacity too small (${ndef.maxSize} bytes)"
-                    return
-                }
+                if (!ndef.isWritable) { writeError = "Tag is read-only"; return }
+                if (ndef.maxSize < message.toByteArray().size) { writeError = "Tag capacity too small (${ndef.maxSize} bytes)"; return }
                 ndef.writeNdefMessage(message)
                 finishWriting()
             } else {
@@ -763,7 +631,7 @@ class MainActivity : ComponentActivity() {
             Log.e("Tangible", "Error writing to tag", e)
             writeError = "Failed to write: ${e.message}"
         } finally {
-            try { ndef?.close() } catch (e: Exception) {}
+            try { ndef?.close() } catch (e: Exception) { }
         }
     }
 
@@ -792,8 +660,6 @@ fun TangibleApp(
     selectedChromecastId: String?,
     onChromecastDeviceSelected: (String) -> Unit,
     onRefreshChromecast: () -> Unit,
-    isSpotifyAuthorized: Boolean,
-    onConnectSpotify: () -> Unit,
     onStartWriting: (String) -> Unit,
     onCancelWriting: () -> Unit,
     onSearchAlbums: suspend (String) -> List<DiscogsSearchResult>,
@@ -822,9 +688,7 @@ fun TangibleApp(
                 },
                 isWriting = isWritingMode,
                 writeError = writeError,
-                onWriteClick = { url ->
-                    onStartWriting(url)
-                },
+                onWriteClick = { url -> onStartWriting(url) },
                 onCancelClick = onCancelWriting,
                 onSearchAlbums = onSearchAlbums,
                 onSearchMovies = onSearchMovies,
@@ -849,8 +713,6 @@ fun TangibleApp(
                 selectedChromecastId = selectedChromecastId,
                 onChromecastDeviceSelected = onChromecastDeviceSelected,
                 onRefreshChromecast = onRefreshChromecast,
-                isSpotifyAuthorized = isSpotifyAuthorized,
-                onConnectSpotify = onConnectSpotify,
                 selectedRegion = selectedRegion,
                 onRegionSelected = onRegionSelected
             )

@@ -45,7 +45,14 @@ class ChromecastDiscovery(private val context: Context) {
                     }
                     override fun onServiceResolved(info: NsdServiceInfo) {
                         val host = info.host?.hostAddress ?: return
-                        // "fn" attribute is the Chromecast friendly name
+                        // "md" attribute is the device model — first/second/third-gen Chromecasts
+                        // don't run Android TV and have no ADB support, so skip them.
+                        val model = info.attributes["md"]?.let { String(it) } ?: ""
+                        if (model.equals("Chromecast", ignoreCase = true) ||
+                            model.equals("Chromecast Ultra", ignoreCase = true)) {
+                            Log.d(TAG, "Skipping non-Android-TV device: $model")
+                            return
+                        }
                         val friendlyName = info.attributes["fn"]?.let { String(it) }
                             ?: info.serviceName
                         val device = ChromecastDevice(
@@ -54,7 +61,7 @@ class ChromecastDiscovery(private val context: Context) {
                             host = host,
                             port = info.port
                         )
-                        Log.d(TAG, "Resolved Chromecast: $friendlyName at $host:${info.port}")
+                        Log.d(TAG, "Resolved Android TV: $friendlyName ($model) at $host:${info.port}")
                         devices[device.id] = device
                     }
                 })

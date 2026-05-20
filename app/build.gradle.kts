@@ -33,6 +33,11 @@ android {
     buildFeatures {
         compose = true
     }
+    packaging {
+        resources {
+            excludes += setOf("META-INF/LICENSE.md", "META-INF/LICENSE-notice.md")
+        }
+    }
 }
 
 dependencies {
@@ -59,8 +64,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(files("libs/spotify-app-remote-release-0.8.0.aar"))
     implementation("com.google.code.gson:gson:2.10.1")
-    implementation("com.google.android.gms:play-services-cast-framework:21.5.0")
-    implementation("androidx.mediarouter:mediarouter:1.7.0")
+    implementation("io.github.mobile-dev-inc:dadb:1.2.7")
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

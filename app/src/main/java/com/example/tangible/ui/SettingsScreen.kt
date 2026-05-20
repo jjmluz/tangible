@@ -76,8 +76,6 @@ fun SettingsScreen(
     selectedChromecastId: String?,
     onChromecastDeviceSelected: (String) -> Unit,
     onRefreshChromecast: () -> Unit,
-    isSpotifyAuthorized: Boolean,
-    onConnectSpotify: () -> Unit,
     selectedRegion: String,
     onRegionSelected: (String) -> Unit
 ) {
@@ -92,14 +90,10 @@ fun SettingsScreen(
                 TextButton(onClick = {
                     onRegionSelected(showRegionWarning!!)
                     showRegionWarning = null
-                }) {
-                    Text("Change")
-                }
+                }) { Text("Change") }
             },
             dismissButton = {
-                TextButton(onClick = { showRegionWarning = null }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { showRegionWarning = null }) { Text("Cancel") }
             }
         )
     }
@@ -123,7 +117,6 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
-            // ... (rest of the content)
             Text(
                 text = "Default music service",
                 style = MaterialTheme.typography.titleMedium,
@@ -143,10 +136,7 @@ fun SettingsScreen(
                             .padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        RadioButton(
-                            selected = (service == selectedService),
-                            onClick = null
-                        )
+                        RadioButton(selected = (service == selectedService), onClick = null)
                         Text(
                             text = service.displayName,
                             style = MaterialTheme.typography.bodyLarge,
@@ -165,7 +155,8 @@ fun SettingsScreen(
             )
             Column(Modifier.selectableGroup()) {
                 MusicSpeaker.entries.forEach { speaker ->
-                    val isDisabled = (speaker == MusicSpeaker.SONOS || speaker == MusicSpeaker.CHROMECAST) && selectedService == MusicService.YOUTUBE_MUSIC
+                    val isDisabled = (speaker == MusicSpeaker.SONOS || speaker == MusicSpeaker.CHROMECAST) &&
+                        selectedService == MusicService.YOUTUBE_MUSIC
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -179,11 +170,7 @@ fun SettingsScreen(
                             .padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        RadioButton(
-                            selected = (speaker == selectedSpeaker),
-                            enabled = !isDisabled,
-                            onClick = null
-                        )
+                        RadioButton(selected = (speaker == selectedSpeaker), enabled = !isDisabled, onClick = null)
                         Column(modifier = Modifier.padding(start = 16.dp)) {
                             Text(
                                 text = speaker.displayName,
@@ -209,18 +196,15 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Default Chromecast device",
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                    Text(text = "Google TV device", style = MaterialTheme.typography.titleMedium)
                     IconButton(onClick = onRefreshChromecast) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh Chromecast")
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
                 }
 
                 if (chromecastDevices.isEmpty()) {
                     Text(
-                        text = "No Chromecast devices found on this network.",
+                        text = "No Google TV devices found. Make sure ADB debugging is enabled in Developer Options on your TV, then tap refresh.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 8.dp)
@@ -241,15 +225,9 @@ fun SettingsScreen(
                                     .padding(horizontal = 16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                RadioButton(
-                                    selected = isSelected,
-                                    onClick = null
-                                )
+                                RadioButton(selected = isSelected, onClick = null)
                                 Column(modifier = Modifier.padding(start = 16.dp)) {
-                                    Text(
-                                        text = device.name,
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
+                                    Text(text = device.name, style = MaterialTheme.typography.bodyLarge)
                                     Text(
                                         text = device.host,
                                         style = MaterialTheme.typography.bodySmall,
@@ -261,28 +239,15 @@ fun SettingsScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider()
-                Spacer(modifier = Modifier.height(16.dp))
-
-                if (isSpotifyAuthorized) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "Spotify account connected",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                } else {
+                if (selectedService == MusicService.SPOTIFY) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Spotify account required to stream to Chromecast.",
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = "Spotify opens directly on your Google TV via ADB. Enable \"ADB debugging\" in Developer Options on the TV — on first use, approve the \"Allow ADB debugging?\" prompt that appears on screen.",
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(onClick = onConnectSpotify) {
-                        Text("Connect Spotify account")
-                    }
                 }
             }
 
@@ -293,10 +258,7 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Default Sonos speaker",
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                    Text(text = "Default Sonos speaker", style = MaterialTheme.typography.titleMedium)
                     IconButton(onClick = onRefreshSonos) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh Sonos")
                     }
@@ -311,7 +273,6 @@ fun SettingsScreen(
                     )
                 } else {
                     Column(Modifier.selectableGroup()) {
-                        // All speakers option
                         val isAllSelected = selectedSonosIp == SONOS_ALL_SPEAKERS
                         Row(
                             Modifier
@@ -325,10 +286,7 @@ fun SettingsScreen(
                                 .padding(horizontal = 16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RadioButton(
-                                selected = isAllSelected,
-                                onClick = null
-                            )
+                            RadioButton(selected = isAllSelected, onClick = null)
                             Text(
                                 text = "All speakers",
                                 style = MaterialTheme.typography.bodyLarge,
@@ -350,15 +308,9 @@ fun SettingsScreen(
                                     .padding(horizontal = 16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                RadioButton(
-                                    selected = isSelected,
-                                    onClick = null
-                                )
+                                RadioButton(selected = isSelected, onClick = null)
                                 Column(modifier = Modifier.padding(start = 16.dp)) {
-                                    Text(
-                                        text = sonosSpeaker.name,
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
+                                    Text(text = sonosSpeaker.name, style = MaterialTheme.typography.bodyLarge)
                                     Text(
                                         text = sonosSpeaker.model,
                                         style = MaterialTheme.typography.bodySmall,
@@ -406,9 +358,7 @@ fun SettingsScreen(
                         DropdownMenuItem(
                             text = { Text("$name ($code)") },
                             onClick = {
-                                if (code != selectedRegion) {
-                                    showRegionWarning = code
-                                }
+                                if (code != selectedRegion) showRegionWarning = code
                                 regionExpanded = false
                             },
                             contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
