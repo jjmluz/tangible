@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
 enum class TagType { MUSIC, MOVIE }
 
 enum class WriteAsOption {
-    TANGIBLE, SPOTIFY, YOUTUBE_MUSIC
+    TANGIBLE, SPOTIFY, YOUTUBE_MUSIC, APPLE_MUSIC
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -96,6 +96,7 @@ fun WriteTagScreen(
                 selectedUris.spotifyTrack?.let { queryParams.add("spotify_track=${Uri.encode(it)}") }
                 selectedUris.spotifyAlbum?.let { queryParams.add("spotify_album=${Uri.encode(it)}") }
                 selectedUris.ytm?.let { queryParams.add("ytm=${Uri.encode(it)}") }
+                selectedUris.appleMusic?.let { queryParams.add("apple_music=${Uri.encode(it)}") }
                 if (queryParams.isNotEmpty()) "tangible://play?${queryParams.joinToString("&")}" else ""
             }
             WriteAsOption.SPOTIFY -> {
@@ -108,6 +109,7 @@ fun WriteTagScreen(
                 } ?: ""
             }
             WriteAsOption.YOUTUBE_MUSIC -> selectedUris.ytm ?: ""
+            WriteAsOption.APPLE_MUSIC -> selectedUris.appleMusic ?: ""
         }
     }
 
@@ -257,6 +259,7 @@ fun WriteTagScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MusicContent(
     searchQuery: String,
@@ -272,6 +275,8 @@ private fun MusicContent(
     onWriteAsChange: (WriteAsOption) -> Unit,
     onWriteClick: () -> Unit
 ) {
+    var expanded by remember { mutableStateOf(false) }
+
     OutlinedTextField(
         value = searchQuery,
         onValueChange = onSearchQueryChange,
@@ -304,6 +309,62 @@ private fun MusicContent(
         }
     }
 
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        OutlinedTextField(
+            value = when (writeAs) {
+                WriteAsOption.TANGIBLE -> "Tangible URI (Multi-player)"
+                WriteAsOption.SPOTIFY -> "Spotify URI (Direct)"
+                WriteAsOption.YOUTUBE_MUSIC -> "YouTube Music URI (Direct)"
+                WriteAsOption.APPLE_MUSIC -> "Apple Music URI (Direct)"
+            },
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Write as") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier = Modifier
+                .menuAnchor()
+                .fillMaxWidth()
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("Tangible URI (Multi-player support)") },
+                onClick = {
+                    onWriteAsChange(WriteAsOption.TANGIBLE)
+                    expanded = false
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Spotify URI (Opens Spotify directly)") },
+                onClick = {
+                    onWriteAsChange(WriteAsOption.SPOTIFY)
+                    expanded = false
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("YouTube Music URI (Opens YTM directly)") },
+                onClick = {
+                    onWriteAsChange(WriteAsOption.YOUTUBE_MUSIC)
+                    expanded = false
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Apple Music URI (Opens Apple Music directly)") },
+                onClick = {
+                    onWriteAsChange(WriteAsOption.APPLE_MUSIC)
+                    expanded = false
+                }
+            )
+        }
+    }
+
     OutlinedTextField(
         value = url,
         onValueChange = onUrlChange,
@@ -314,40 +375,6 @@ private fun MusicContent(
 
     if (writeError != null) {
         Text(text = writeError, color = MaterialTheme.colorScheme.error)
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("Write as:", style = MaterialTheme.typography.labelLarge)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(
-                selected = writeAs == WriteAsOption.TANGIBLE,
-                onClick = { onWriteAsChange(WriteAsOption.TANGIBLE) }
-            )
-            Text(
-                "Tangible URI (Multi-player support)",
-                modifier = Modifier.clickable { onWriteAsChange(WriteAsOption.TANGIBLE) }
-            )
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(
-                selected = writeAs == WriteAsOption.SPOTIFY,
-                onClick = { onWriteAsChange(WriteAsOption.SPOTIFY) }
-            )
-            Text(
-                "Spotify URI (Opens Spotify directly)",
-                modifier = Modifier.clickable { onWriteAsChange(WriteAsOption.SPOTIFY) }
-            )
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(
-                selected = writeAs == WriteAsOption.YOUTUBE_MUSIC,
-                onClick = { onWriteAsChange(WriteAsOption.YOUTUBE_MUSIC) }
-            )
-            Text(
-                "YouTube Music URI (Opens YTM directly)",
-                modifier = Modifier.clickable { onWriteAsChange(WriteAsOption.YOUTUBE_MUSIC) }
-            )
-        }
     }
 
     Button(

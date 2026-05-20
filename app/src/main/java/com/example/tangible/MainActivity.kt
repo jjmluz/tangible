@@ -27,6 +27,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import android.widget.Toast
+import com.example.tangible.data.AppleMusicRepository
 import com.example.tangible.data.ChromecastDevice
 import com.example.tangible.data.ChromecastDiscovery
 import com.example.tangible.data.ChromecastRepository
@@ -62,7 +63,8 @@ import kotlinx.coroutines.launch
 data class TagMediaUris(
     val spotifyTrack: String? = null,
     val spotifyAlbum: String? = null,
-    val ytm: String? = null
+    val ytm: String? = null,
+    val appleMusic: String? = null
 )
 
 const val SONOS_ALL_SPEAKERS = "ALL_SPEAKERS"
@@ -113,6 +115,7 @@ class MainActivity : ComponentActivity() {
     private val spotifyRepository by lazy { SpotifyRepository(clientId, clientSecret) }
     private val youtubeApiKey = "REMOVED_SECRET"
     private val youtubeRepository by lazy { YouTubeRepository(youtubeApiKey) }
+    private val appleMusicRepository by lazy { AppleMusicRepository() }
     private val sonosDiscovery by lazy { SonosDiscovery(this) }
     private val sonosRepository by lazy { SonosRepository() }
     private val chromecastDiscovery by lazy { ChromecastDiscovery(this) }
@@ -223,16 +226,19 @@ class MainActivity : ComponentActivity() {
                             val spotifyTrackUri = album?.let { spotifyRepository.getFirstTrackUri(it.id) }
 
                             val parts = discogsAlbum.title.split(" - ", limit = 2)
-                            val ytmUri = if (parts.size == 2) {
-                                youtubeRepository.searchAlbum(parts[1], parts[0])
-                            } else {
-                                youtubeRepository.searchAlbum(discogsAlbum.title, "")
-                            } ?: "https://music.youtube.com/search?q=${Uri.encode(discogsAlbum.title)}"
+                            val (artist, title) = if (parts.size == 2) parts[0] to parts[1] else "" to discogsAlbum.title
+
+                            val ytmUri = youtubeRepository.searchAlbum(title, artist)
+                                ?: "https://music.youtube.com/search?q=${Uri.encode(discogsAlbum.title)}"
+
+                            val appleMusicUri = appleMusicRepository.searchAlbum(title, artist)
+                                ?: "https://music.apple.com/search?term=${Uri.encode(discogsAlbum.title)}"
 
                             TagMediaUris(
                                 spotifyTrack = spotifyTrackUri,
                                 spotifyAlbum = spotifyAlbumUri,
-                                ytm = ytmUri
+                                ytm = ytmUri,
+                                appleMusic = appleMusicUri
                             )
                         },
                         movieProviders = movieProviders,
@@ -437,7 +443,8 @@ class MainActivity : ComponentActivity() {
                 uris = TagMediaUris(
                     spotifyTrack = uri.getQueryParameter("spotify_track") ?: uri.getQueryParameter("spotify") ?: uri.getQueryParameter("query"),
                     spotifyAlbum = uri.getQueryParameter("spotify_album"),
-                    ytm = uri.getQueryParameter("ytm")
+                    ytm = uri.getQueryParameter("ytm"),
+                    appleMusic = uri.getQueryParameter("apple_music")
                 )
             } else if (uri.scheme == "tangible" && uri.host == "movie") {
                 val typePriority = listOf("s", "f", "r", "b")
@@ -479,7 +486,7 @@ class MainActivity : ComponentActivity() {
 
         data?.let { parseTangibleUri(it) }
 
-        if (uris.spotifyTrack == null && uris.spotifyAlbum == null && uris.ytm == null && movieToPlay == null) {
+        if (uris.spotifyTrack == null && uris.spotifyAlbum == null && uris.ytm == null && uris.appleMusic == null && movieToPlay == null) {
             val rawMsgs = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES)
             rawMsgs?.forEach {
                 val msg = it as NdefMessage
@@ -497,7 +504,7 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        if ((uris.spotifyTrack != null || uris.spotifyAlbum != null || uris.ytm != null) && !isWritingMode) {
+        if ((uris.spotifyTrack != null || uris.spotifyAlbum != null || uris.ytm != null || uris.appleMusic != null) && !isWritingMode) {
             Log.d("Tangible", "Action: selectedService=$selectedService, selectedSpeaker=$selectedSpeaker, uris=$uris")
             when {
                 selectedService == MusicService.SPOTIFY && selectedSpeaker == MusicSpeaker.THIS_DEVICE -> {
@@ -507,6 +514,9 @@ class MainActivity : ComponentActivity() {
                 selectedService == MusicService.YOUTUBE_MUSIC && selectedSpeaker == MusicSpeaker.THIS_DEVICE -> {
                     uris.ytm?.let { playOnYouTubeMusic(it) }
                 }
+                selectedService == MusicService.APPLE_MUSIC && selectedSpeaker == MusicSpeaker.THIS_DEVICE -> {
+                    uris.appleMusic?.let { playOnAppleMusic(it) }
+                }
                 selectedService == MusicService.SPOTIFY && selectedSpeaker == MusicSpeaker.SONOS -> {
                     val toPlay = uris.spotifyAlbum ?: uris.spotifyTrack
                     toPlay?.let { playOnSonos(it) }
@@ -514,9 +524,18 @@ class MainActivity : ComponentActivity() {
                 selectedService == MusicService.YOUTUBE_MUSIC && selectedSpeaker == MusicSpeaker.SONOS -> {
                     Toast.makeText(this, "YouTube Music + Sonos not yet implemented", Toast.LENGTH_SHORT).show()
                 }
+                selectedService == MusicService.APPLE_MUSIC && selectedSpeaker == MusicSpeaker.SONOS -> {
+                    uris.appleMusic?.let { playOnSonos(it) }
+                }
                 selectedService == MusicService.SPOTIFY && selectedSpeaker == MusicSpeaker.CHROMECAST -> {
                     val toPlay = uris.spotifyAlbum ?: uris.spotifyTrack
                     toPlay?.let { playOnChromecast(it) }
+                }
+                selectedService == MusicService.APPLE_MUSIC && selectedSpeaker == MusicSpeaker.CHROMECAST -> {
+                    uris.appleMusic?.let {
+                        playOnAppleMusic(it)
+                        Toast.makeText(this, "Please tap the Cast button in Apple Music", Toast.LENGTH_LONG).show()
+                    }
                 }
             }
             return
@@ -551,7 +570,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun playOnSonos(spotifyUri: String) {
+    private fun playOnSonos(musicUri: String) {
         val ip = selectedSonosIp
         if (ip == null) {
             Toast.makeText(this, "Please select a Sonos speaker in Settings", Toast.LENGTH_LONG).show()
@@ -559,15 +578,19 @@ class MainActivity : ComponentActivity() {
         }
         
         lifecycleScope.launch {
-            val finalUri = if (spotifyUri.startsWith("spotify:")) {
-                spotifyUri
+            val finalUri = if (selectedService == MusicService.SPOTIFY) {
+                if (musicUri.startsWith("spotify:")) {
+                    musicUri
+                } else {
+                    val results = spotifyRepository.searchAlbums(musicUri)
+                    results.firstOrNull()?.uri
+                }
             } else {
-                val results = spotifyRepository.searchAlbums(spotifyUri)
-                results.firstOrNull()?.uri
+                musicUri // For Apple Music, we already have the URL
             }
 
             if (finalUri == null) {
-                Log.e("Tangible", "Could not resolve Spotify URI for $spotifyUri")
+                Log.e("Tangible", "Could not resolve URI for $musicUri")
                 return@launch
             }
 
@@ -606,11 +629,33 @@ class MainActivity : ComponentActivity() {
                         // 3. Wait for the topology to stabilize
                         delay(3000)
                     }
-                    sonosRepository.playSpotifyUri(master.ip, finalUri)
+                    if (selectedService == MusicService.APPLE_MUSIC) {
+                        sonosRepository.playAppleMusicUri(master.ip, finalUri)
+                    } else {
+                        sonosRepository.playSpotifyUri(master.ip, finalUri)
+                    }
                 }
             } else {
-                sonosRepository.playSpotifyUri(ip, finalUri)
+                if (selectedService == MusicService.APPLE_MUSIC) {
+                    sonosRepository.playAppleMusicUri(ip, finalUri)
+                } else {
+                    sonosRepository.playSpotifyUri(ip, finalUri)
+                }
             }
+        }
+    }
+
+    private fun playOnAppleMusic(url: String) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            intent.setPackage("com.apple.android.music")
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+        } catch (e: Exception) {
+            // Fallback to browser if app not installed
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
         }
     }
 

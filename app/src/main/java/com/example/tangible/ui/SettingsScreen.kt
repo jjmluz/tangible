@@ -21,7 +21,8 @@ import com.example.tangible.data.SonosSpeaker
 
 enum class MusicService(val displayName: String) {
     SPOTIFY("Spotify"),
-    YOUTUBE_MUSIC("YouTube Music")
+    YOUTUBE_MUSIC("YouTube Music"),
+    APPLE_MUSIC("Apple Music")
 }
 
 enum class MusicSpeaker(val displayName: String) {

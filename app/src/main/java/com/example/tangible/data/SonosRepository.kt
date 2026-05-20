@@ -14,6 +14,7 @@ class SonosRepository {
     private val TAG = "SonosRepository"
 
     private data class SpotifyAccount(val sid: String, val sn: String, val svc: String)
+    private data class AppleMusicAccount(val sid: String = "204", val sn: String = "0", val svc: String = "52483")
 
     private suspend fun getSpotifyAccount(ip: String): SpotifyAccount = withContext(Dispatchers.IO) {
         try {
@@ -69,6 +70,39 @@ class SonosRepository {
 
             return@withContext play(coordinatorIp)
         }
+    }
+
+    suspend fun playAppleMusicUri(speakerIp: String, appleMusicUrl: String): Boolean = withContext(Dispatchers.IO) {
+        val coordinatorIp = getCoordinatorIp(speakerIp) ?: speakerIp
+        val speakerUuid = getSpeakerUuid(coordinatorIp) ?: return@withContext false
+
+        // Extract ID from URL like https://music.apple.com/us/album/kind-of-blue/158322638
+        val albumId = appleMusicUrl.substringAfterLast("/")
+        if (albumId.isBlank()) return@withContext false
+
+        val account = AppleMusicAccount() // Using default SID 204 for now
+        
+        // URI prefix 0004206c for Apple Music containers
+        val uri = "x-rincon-cpcontainer:0004206calbum:$albumId"
+        val metadata = buildAppleMusicMetadata(albumId, account.svc)
+        Log.d(TAG, "Playing Apple Music album: $uri")
+
+        clearQueue(coordinatorIp)
+        setSourceToQueue(coordinatorIp, speakerUuid)
+        delay(200)
+
+        if (!addToQueue(coordinatorIp, uri, metadata)) return@withContext false
+        delay(200)
+
+        seekToTrack(coordinatorIp, 1)
+        delay(100)
+
+        return@withContext play(coordinatorIp)
+    }
+
+    private fun buildAppleMusicMetadata(albumId: String, serviceType: String): String {
+        val id = "0004206calbum:$albumId"
+        return """<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="$id" restricted="true"><upnp:class>object.container.album.musicAlbum</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON${serviceType}_X_#Svc${serviceType}-0-Token</desc></item></DIDL-Lite>"""
     }
 
     // Metadata format matching node-sonos-http-api's getSpotifyMetadata():
