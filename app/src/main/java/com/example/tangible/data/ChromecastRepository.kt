@@ -35,8 +35,8 @@ class ChromecastRepository(private val context: Context) {
         }
         Log.d(TAG, "Cast session started for '${device.name}', waiting for Spotify to launch…")
 
-        // Give the Spotify Cast receiver time to fully start up
-        delay(4_000)
+        // Small delay to let the session stabilize
+        delay(1_000)
 
         return withContext(Dispatchers.IO) {
             spotifyAuth.playOnDevice(token, device.name, spotifyUri)

@@ -326,6 +326,7 @@ class MainActivity : ComponentActivity() {
                 return@launch
             }
 
+            Toast.makeText(this@MainActivity, "Connecting to ${device.name}...", Toast.LENGTH_SHORT).show()
             val ok = chromecastRepository.playSpotifyUri(device, spotifyUri, spotifyAuthRepository)
             if (!ok) {
                 Toast.makeText(this@MainActivity, "Could not play on Chromecast", Toast.LENGTH_SHORT).show()
@@ -509,36 +510,48 @@ class MainActivity : ComponentActivity() {
             when {
                 selectedService == MusicService.SPOTIFY && selectedSpeaker == MusicSpeaker.THIS_DEVICE -> {
                     val toPlay = uris.spotifyTrack ?: uris.spotifyAlbum
+                    Log.d("Tangible", "Playing on Spotify (this device): $toPlay")
                     toPlay?.let { playOnSpotify(it) }
                 }
                 selectedService == MusicService.YOUTUBE_MUSIC && selectedSpeaker == MusicSpeaker.THIS_DEVICE -> {
+                    Log.d("Tangible", "Playing on YouTube Music: ${uris.ytm}")
                     uris.ytm?.let { playOnYouTubeMusic(it) }
                 }
                 selectedService == MusicService.APPLE_MUSIC && selectedSpeaker == MusicSpeaker.THIS_DEVICE -> {
+                    Log.d("Tangible", "Playing on Apple Music: ${uris.appleMusic}")
                     uris.appleMusic?.let { playOnAppleMusic(it) }
                 }
                 selectedService == MusicService.SPOTIFY && selectedSpeaker == MusicSpeaker.SONOS -> {
                     val toPlay = uris.spotifyAlbum ?: uris.spotifyTrack
+                    Log.d("Tangible", "Playing on Sonos (Spotify): $toPlay")
                     toPlay?.let { playOnSonos(it) }
                 }
                 selectedService == MusicService.YOUTUBE_MUSIC && selectedSpeaker == MusicSpeaker.SONOS -> {
                     Toast.makeText(this, "YouTube Music + Sonos not yet implemented", Toast.LENGTH_SHORT).show()
                 }
                 selectedService == MusicService.APPLE_MUSIC && selectedSpeaker == MusicSpeaker.SONOS -> {
+                    Log.d("Tangible", "Playing on Sonos (Apple Music): ${uris.appleMusic}")
                     uris.appleMusic?.let { playOnSonos(it) }
                 }
                 selectedService == MusicService.SPOTIFY && selectedSpeaker == MusicSpeaker.CHROMECAST -> {
                     val toPlay = uris.spotifyAlbum ?: uris.spotifyTrack
+                    Log.d("Tangible", "Playing on Chromecast (Spotify): $toPlay")
                     toPlay?.let { playOnChromecast(it) }
                 }
                 selectedService == MusicService.APPLE_MUSIC && selectedSpeaker == MusicSpeaker.CHROMECAST -> {
+                    Log.d("Tangible", "Playing on Chromecast (Apple Music): ${uris.appleMusic}")
                     uris.appleMusic?.let {
                         playOnAppleMusic(it)
                         Toast.makeText(this, "Please tap the Cast button in Apple Music", Toast.LENGTH_LONG).show()
                     }
                 }
+                else -> {
+                    Log.w("Tangible", "No action for service $selectedService and speaker $selectedSpeaker")
+                }
             }
             return
+        } else {
+            Log.d("Tangible", "No URIs found or in writing mode. uris=$uris, isWritingMode=$isWritingMode")
         }
     }
 

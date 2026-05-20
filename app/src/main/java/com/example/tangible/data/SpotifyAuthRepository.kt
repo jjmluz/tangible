@@ -116,65 +116,93 @@ class SpotifyAuthRepository(
     }
 
     suspend fun playOnDevice(token: String, deviceName: String, spotifyUri: String): Boolean = withContext(Dispatchers.IO) {
-        // Fetch available Spotify Connect devices
-        val devicesJson = try {
-            val req = Request.Builder()
-                .url("https://api.spotify.com/v1/me/player/devices")
-                .addHeader("Authorization", "Bearer $token")
-                .build()
-            client.newCall(req).execute().use { it.body?.string() } ?: return@withContext false
-        } catch (e: Exception) {
-            Log.e(TAG, "Get devices failed: ${e.message}")
-            return@withContext false
+        var deviceId: String? = null
+        
+        // Retry finding the device for up to 15 seconds. 
+        val startTime = System.currentTimeMillis()
+        while (deviceId == null && System.currentTimeMillis() - startTime < 15000) {
+            val devicesJson = try {
+                val req = Request.Builder()
+                    .url("https://api.spotify.com/v1/me/player/devices")
+                    .addHeader("Authorization", "Bearer $token")
+                    .build()
+                client.newCall(req).execute().use { it.body?.string() }
+            } catch (e: Exception) { null }
+
+            if (devicesJson != null) {
+                deviceId = parseDeviceId(devicesJson, deviceName)
+            }
+            
+            if (deviceId == null) {
+                Thread.sleep(1500)
+            }
         }
 
-        Log.d(TAG, "Spotify devices: $devicesJson")
-
-        val deviceId = parseDeviceId(devicesJson, deviceName)
         if (deviceId == null) {
-            Log.e(TAG, "No Spotify device found matching '$deviceName'")
+            Log.e(TAG, "No Spotify device found matching '$deviceName' after 15s")
             return@withContext false
         }
 
-        // Transfer playback to the Chromecast device
+        // 1. Force a Transfer Playback. This is the most reliable way to "wake up" the UI
+        // on Android TV/Chromecast. We set 'play' to true to start the engine.
         try {
-            val transferBody = """{"device_ids":["$deviceId"],"play":false}"""
+            val transferBody = """{"device_ids":["$deviceId"],"play":true}"""
                 .toRequestBody("application/json".toMediaType())
             Request.Builder()
                 .url("https://api.spotify.com/v1/me/player")
                 .addHeader("Authorization", "Bearer $token")
                 .put(transferBody)
                 .build()
-                .let { client.newCall(it).execute().close() }
+                .let { client.newCall(it).execute().use { it.isSuccessful } }
+            
+            // Wait for the transfer to settle and the receiver to transition
+            Thread.sleep(2000)
         } catch (e: Exception) {
             Log.e(TAG, "Transfer failed: ${e.message}")
         }
 
-        Thread.sleep(500)
-
-        // Play the Spotify URI on that device
+        // 2. Play the specific URI
         val isTrack = spotifyUri.startsWith("spotify:track:")
         val playBody = if (isTrack) {
-            """{"uris":["$spotifyUri"],"device_id":"$deviceId"}"""
+            """{"uris":["$spotifyUri"]}"""
         } else {
-            """{"context_uri":"$spotifyUri","device_id":"$deviceId"}"""
+            """{"context_uri":"$spotifyUri"}"""
         }.toRequestBody("application/json".toMediaType())
 
-        return@withContext try {
+        var playSuccess = false
+        try {
             val req = Request.Builder()
-                .url("https://api.spotify.com/v1/me/player/play")
+                .url("https://api.spotify.com/v1/me/player/play?device_id=$deviceId")
                 .addHeader("Authorization", "Bearer $token")
                 .put(playBody)
                 .build()
-            val response = client.newCall(req).execute()
-            val code = response.code
-            response.close()
-            Log.d(TAG, "Play response: $code for URI: $spotifyUri")
-            code in 200..204
+            client.newCall(req).execute().use { response ->
+                Log.d(TAG, "First play response: ${response.code}")
+                playSuccess = response.code in 200..204
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Play failed: ${e.message}")
-            false
         }
+
+        // 3. UI Nudge: If the app is stuck on the splash screen but playing, 
+        // sending the play command again after a short delay often forces a UI refresh.
+        if (playSuccess) {
+            Thread.sleep(1500)
+            try {
+                val req = Request.Builder()
+                    .url("https://api.spotify.com/v1/me/player/play?device_id=$deviceId")
+                    .addHeader("Authorization", "Bearer $token")
+                    .put(playBody)
+                    .build()
+                client.newCall(req).execute().use { response ->
+                    Log.d(TAG, "UI Nudge play response: ${response.code}")
+                }
+            } catch (e: Exception) {
+                // Ignore errors on the nudge
+            }
+        }
+
+        return@withContext playSuccess
     }
 
     private fun parseDeviceId(json: String, deviceName: String): String? {
