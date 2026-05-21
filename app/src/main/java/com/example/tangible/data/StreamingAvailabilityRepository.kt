@@ -40,7 +40,7 @@ private val SERVICE_CONFIGS: Map<String, ServiceConfig> = mapOf(
     "prime" to ServiceConfig(
         shortKey = "pv", displayName = "Prime Video",
         extractId = { url -> Regex("/detail/([A-Z0-9]{10,})").find(url)?.groupValues?.get(1) },
-        buildLink = { id -> "https://www.primevideo.com/detail/$id" }
+        buildLink = { id -> "https://app.primevideo.com/detail/$id" }
     ),
     "disney" to ServiceConfig(
         shortKey = "dp", displayName = "Disney+",

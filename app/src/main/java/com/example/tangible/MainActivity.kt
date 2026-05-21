@@ -17,14 +17,28 @@ import android.provider.MediaStore
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.tangible.ui.TangibleBackground
+import com.example.tangible.ui.TangiblePurple
+import com.example.tangible.ui.TangibleSurface
+import com.example.tangible.ui.TangibleTheme
 import android.widget.Toast
 import com.example.tangible.data.AdbRepository
 import com.example.tangible.data.AppleMusicRepository
@@ -140,7 +154,7 @@ class MainActivity : ComponentActivity() {
         intent?.let { handleIntent(it) }
 
         setContent {
-            MaterialTheme {
+            TangibleTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -515,9 +529,24 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "Please select a Google TV device in Settings", Toast.LENGTH_LONG).show()
             return
         }
+        val uri = Uri.parse(url)
+        val packageName: String
+        val tvUrl: String
+        if (uri.scheme == "stremio") {
+            packageName = "com.stremio.one"
+            // Mobile format: stremio://detail/movie/tt1234567
+            // TV format:     stremio:///detail/movie/tt1234567/tt1234567
+            val type = uri.pathSegments.getOrNull(0) ?: "movie"
+            val imdbId = uri.pathSegments.getOrNull(1) ?: uri.lastPathSegment ?: ""
+            tvUrl = "stremio:///detail/$type/$imdbId/$imdbId"
+        } else {
+            val urlHost = uri.host?.lowercase() ?: ""
+            packageName = STREAMING_PACKAGES.entries.firstOrNull { urlHost.endsWith(it.key) }?.value ?: ""
+            tvUrl = url
+        }
         lifecycleScope.launch {
             Toast.makeText(this@MainActivity, "Opening movie on TV…", Toast.LENGTH_SHORT).show()
-            val ok = adbRepository.launchUri(host, url, "")
+            val ok = adbRepository.launchUri(host, tvUrl, packageName)
             if (!ok) {
                 Toast.makeText(
                     this@MainActivity,
@@ -729,6 +758,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TangibleApp(
     isWritingMode: Boolean,
@@ -760,60 +790,207 @@ fun TangibleApp(
     onGetServicesForRegion: suspend (String) -> List<MovieProvider>
 ) {
     val navController = rememberNavController()
-    NavHost(navController = navController, startDestination = "main") {
-        composable("main") {
-            MainScreen(
-                onAddClick = { navController.navigate("write_tag") },
-                onSettingsClick = { navController.navigate("settings") }
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+    val showChrome = currentRoute == "home" || currentRoute == "settings"
+
+    Scaffold(
+        topBar = {
+            if (showChrome) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = if (currentRoute == "settings") "Settings" else "Tangible",
+                            style = if (currentRoute == "home")
+                                MaterialTheme.typography.headlineMedium
+                            else
+                                MaterialTheme.typography.titleLarge,
+                            color = if (currentRoute == "home")
+                                TangiblePurple
+                            else
+                                MaterialTheme.colorScheme.onBackground
+                        )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = TangibleBackground
+                    )
+                )
+            }
+        },
+        bottomBar = {
+            if (showChrome) {
+                TangibleBottomBar(
+                    currentRoute = currentRoute,
+                    onHomeClick = {
+                        navController.navigate("home") {
+                            popUpTo("home") { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    },
+                    onWriteClick = { navController.navigate("write_tag") },
+                    onSettingsClick = {
+                        navController.navigate("settings") {
+                            popUpTo("home") { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+            }
+        },
+        containerColor = TangibleBackground
+    ) { innerPadding ->
+        NavHost(
+            navController = navController,
+            startDestination = "home",
+            modifier = Modifier.padding(innerPadding)
+        ) {
+            composable("home") {
+                MainScreen()
+            }
+            composable("write_tag") {
+                WriteTagScreen(
+                    onBackClick = {
+                        onCancelWriting()
+                        navController.popBackStack()
+                    },
+                    isWriting = isWritingMode,
+                    writeError = writeError,
+                    onWriteClick = { url -> onStartWriting(url) },
+                    onCancelClick = onCancelWriting,
+                    onSearchAlbums = onSearchAlbums,
+                    onSearchMovies = onSearchMovies,
+                    onGetMovieStreaming = onGetMovieStreaming,
+                    region = selectedRegion,
+                    onAlbumSelected = onAlbumSelected
+                )
+            }
+            composable("settings") {
+                SettingsScreen(
+                    onMovieProvidersClick = { navController.navigate("movie_providers") },
+                    selectedService = selectedService,
+                    onServiceSelected = onServiceSelected,
+                    selectedSpeaker = selectedSpeaker,
+                    onSpeakerSelected = onSpeakerSelected,
+                    sonosSpeakers = sonosSpeakers,
+                    selectedSonosIp = selectedSonosIp,
+                    onSonosSpeakerSelected = onSonosSpeakerSelected,
+                    onRefreshSonos = onRefreshSonos,
+                    chromecastDevices = chromecastDevices,
+                    selectedChromecastId = selectedChromecastId,
+                    onChromecastDeviceSelected = onChromecastDeviceSelected,
+                    onRefreshChromecast = onRefreshChromecast,
+                    selectedMoviePlayer = selectedMoviePlayer,
+                    onMoviePlayerSelected = onMoviePlayerSelected,
+                    selectedRegion = selectedRegion,
+                    onRegionSelected = onRegionSelected
+                )
+            }
+            composable("movie_providers") {
+                MovieProvidersScreen(
+                    onBackClick = { navController.popBackStack() },
+                    region = selectedRegion,
+                    providers = movieProviders,
+                    onProvidersChanged = onMovieProvidersChanged,
+                    onGetServicesForRegion = onGetServicesForRegion
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TangibleBottomBar(
+    currentRoute: String?,
+    onHomeClick: () -> Unit,
+    onWriteClick: () -> Unit,
+    onSettingsClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(96.dp)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(72.dp)
+                .align(Alignment.BottomCenter),
+            color = TangibleSurface,
+            shadowElevation = 8.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                BottomNavItem(
+                    icon = Icons.Default.Home,
+                    label = "Home",
+                    selected = currentRoute == "home",
+                    onClick = onHomeClick,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                BottomNavItem(
+                    icon = Icons.Default.Settings,
+                    label = "Settings",
+                    selected = currentRoute == "settings",
+                    onClick = onSettingsClick,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        FloatingActionButton(
+            onClick = onWriteClick,
+            modifier = Modifier
+                .size(60.dp)
+                .align(Alignment.TopCenter),
+            containerColor = TangiblePurple,
+            elevation = FloatingActionButtonDefaults.elevation(
+                defaultElevation = 8.dp,
+                pressedElevation = 12.dp
+            )
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Write Tag",
+                tint = Color.White,
+                modifier = Modifier.size(28.dp)
             )
         }
-        composable("write_tag") {
-            WriteTagScreen(
-                onBackClick = {
-                    onCancelWriting()
-                    navController.popBackStack()
-                },
-                isWriting = isWritingMode,
-                writeError = writeError,
-                onWriteClick = { url -> onStartWriting(url) },
-                onCancelClick = onCancelWriting,
-                onSearchAlbums = onSearchAlbums,
-                onSearchMovies = onSearchMovies,
-                onGetMovieStreaming = onGetMovieStreaming,
-                region = selectedRegion,
-                onAlbumSelected = onAlbumSelected
-            )
-        }
-        composable("settings") {
-            SettingsScreen(
-                onBackClick = { navController.popBackStack() },
-                onMovieProvidersClick = { navController.navigate("movie_providers") },
-                selectedService = selectedService,
-                onServiceSelected = onServiceSelected,
-                selectedSpeaker = selectedSpeaker,
-                onSpeakerSelected = onSpeakerSelected,
-                sonosSpeakers = sonosSpeakers,
-                selectedSonosIp = selectedSonosIp,
-                onSonosSpeakerSelected = onSonosSpeakerSelected,
-                onRefreshSonos = onRefreshSonos,
-                chromecastDevices = chromecastDevices,
-                selectedChromecastId = selectedChromecastId,
-                onChromecastDeviceSelected = onChromecastDeviceSelected,
-                onRefreshChromecast = onRefreshChromecast,
-                selectedMoviePlayer = selectedMoviePlayer,
-                onMoviePlayerSelected = onMoviePlayerSelected,
-                selectedRegion = selectedRegion,
-                onRegionSelected = onRegionSelected
-            )
-        }
-        composable("movie_providers") {
-            MovieProvidersScreen(
-                onBackClick = { navController.popBackStack() },
-                region = selectedRegion,
-                providers = movieProviders,
-                onProvidersChanged = onMovieProvidersChanged,
-                onGetServicesForRegion = onGetServicesForRegion
-            )
-        }
+    }
+}
+
+@Composable
+private fun BottomNavItem(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val tint = if (selected) TangiblePurple else Color(0xFF888899)
+    Column(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = tint,
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.height(3.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = tint
+        )
     }
 }

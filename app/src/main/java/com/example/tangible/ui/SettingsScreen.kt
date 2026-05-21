@@ -6,7 +6,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -67,7 +66,6 @@ private val REGIONS = listOf(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    onBackClick: () -> Unit,
     onMovieProvidersClick: () -> Unit,
     selectedService: MusicService,
     onServiceSelected: (MusicService) -> Unit,
@@ -105,25 +103,12 @@ fun SettingsScreen(
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Settings") },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .padding(16.dp)
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-        ) {
+    Column(
+        modifier = Modifier
+            .padding(16.dp)
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+    ) {
             Text(
                 text = "Default music service",
                 style = MaterialTheme.typography.titleMedium,
@@ -482,5 +467,4 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
-    }
 }
