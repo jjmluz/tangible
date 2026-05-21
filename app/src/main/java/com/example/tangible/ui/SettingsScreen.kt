@@ -4,14 +4,16 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.example.tangible.SONOS_ALL_SPEAKERS
@@ -35,7 +37,7 @@ enum class MoviePlayer(val displayName: String) {
     GOOGLE_TV("Google TV")
 }
 
-private val REGIONS = listOf(
+val REGIONS = listOf(
     "AU" to "Australia",
     "AT" to "Austria",
     "BE" to "Belgium",
@@ -63,12 +65,143 @@ private val REGIONS = listOf(
     "US" to "United States"
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
+// ─── Main Settings Page ──────────────────────────────────────────────────────
+
 @Composable
 fun SettingsScreen(
+    selectedService: MusicService,
+    selectedSpeaker: MusicSpeaker,
+    selectedMoviePlayer: MoviePlayer,
+    selectedRegion: String,
+    onMusicServiceClick: () -> Unit,
+    onMusicSpeakerClick: () -> Unit,
+    onMoviePlayerClick: () -> Unit,
+    onMovieRegionClick: () -> Unit,
     onMovieProvidersClick: () -> Unit,
+) {
+    val regionName = REGIONS.find { it.first == selectedRegion }?.second ?: selectedRegion
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        SectionHeader("Music")
+        Spacer(Modifier.height(8.dp))
+        SettingsItem("Streaming service", selectedService.displayName, onMusicServiceClick)
+        Spacer(Modifier.height(8.dp))
+        SettingsItem("Default speaker", selectedSpeaker.displayName, onMusicSpeakerClick)
+
+        Spacer(Modifier.height(24.dp))
+
+        SectionHeader("Movies")
+        Spacer(Modifier.height(8.dp))
+        SettingsItem("Streaming services", "Manage enabled services", onMovieProvidersClick)
+        Spacer(Modifier.height(8.dp))
+        SettingsItem("Default player", selectedMoviePlayer.displayName, onMoviePlayerClick)
+        Spacer(Modifier.height(8.dp))
+        SettingsItem("Region", regionName, onMovieRegionClick)
+
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String) {
+    Text(
+        text = title.uppercase(),
+        style = MaterialTheme.typography.labelMedium,
+        color = TangiblePurple,
+        modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+    )
+}
+
+@Composable
+private fun SettingsItem(title: String, value: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = TangibleSurface
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+// ─── Default streaming service Sub-page ──────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MusicServiceScreen(
+    onBackClick: () -> Unit,
     selectedService: MusicService,
     onServiceSelected: (MusicService) -> Unit,
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Default music streaming service") },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground)
+            )
+        },
+        containerColor = TangibleBackground
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .selectableGroup()
+        ) {
+            MusicService.entries.forEach { service ->
+                SelectionRow(
+                    label = service.displayName,
+                    selected = service == selectedService,
+                    onClick = { onServiceSelected(service) }
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                )
+            }
+        }
+    }
+}
+
+// ─── Default speaker Sub-page ──────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MusicSpeakerScreen(
+    onBackClick: () -> Unit,
+    selectedService: MusicService,
     selectedSpeaker: MusicSpeaker,
     onSpeakerSelected: (MusicSpeaker) -> Unit,
     sonosSpeakers: List<SonosSpeaker>,
@@ -79,392 +212,320 @@ fun SettingsScreen(
     selectedChromecastId: String?,
     onChromecastDeviceSelected: (String) -> Unit,
     onRefreshChromecast: () -> Unit,
-    selectedMoviePlayer: MoviePlayer,
-    onMoviePlayerSelected: (MoviePlayer) -> Unit,
-    selectedRegion: String,
-    onRegionSelected: (String) -> Unit
 ) {
-    var showRegionWarning by remember { mutableStateOf<String?>(null) }
-
-    if (showRegionWarning != null) {
-        AlertDialog(
-            onDismissRequest = { showRegionWarning = null },
-            title = { Text("Change region?") },
-            text = { Text("Changing the region will clear your custom movie provider preferences.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    onRegionSelected(showRegionWarning!!)
-                    showRegionWarning = null
-                }) { Text("Change") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRegionWarning = null }) { Text("Cancel") }
-            }
-        )
-    }
-
-    Column(
-        modifier = Modifier
-            .padding(16.dp)
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-    ) {
-            Text(
-                text = "Default music service",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            Column(Modifier.selectableGroup()) {
-                MusicService.entries.forEach { service ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(56.dp)
-                            .selectable(
-                                selected = (service == selectedService),
-                                onClick = { onServiceSelected(service) },
-                                role = Role.RadioButton
-                            )
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(selected = (service == selectedService), onClick = null)
-                        Text(
-                            text = service.displayName,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(start = 16.dp)
-                        )
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Default music speaker") },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                text = "Default music speaker",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(bottom = 8.dp)
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground)
             )
+        },
+        containerColor = TangibleBackground
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+        ) {
             Column(Modifier.selectableGroup()) {
                 MusicSpeaker.entries.forEach { speaker ->
                     val isDisabled = when (speaker) {
                         MusicSpeaker.SONOS -> selectedService == MusicService.YOUTUBE_MUSIC ||
-                            selectedService == MusicService.APPLE_MUSIC
+                                selectedService == MusicService.APPLE_MUSIC
                         MusicSpeaker.CHROMECAST -> selectedService == MusicService.APPLE_MUSIC
                         else -> false
                     }
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(56.dp)
-                            .selectable(
-                                selected = (speaker == selectedSpeaker),
-                                enabled = !isDisabled,
-                                onClick = { onSpeakerSelected(speaker) },
-                                role = Role.RadioButton
-                            )
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(selected = (speaker == selectedSpeaker), enabled = !isDisabled, onClick = null)
-                        Column(modifier = Modifier.padding(start = 16.dp)) {
-                            Text(
-                                text = speaker.displayName,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = if (isDisabled) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) else Color.Unspecified
-                            )
-                            if (isDisabled) {
-                                Text(
-                                    text = "Not supported with ${selectedService.displayName}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                )
-                            }
-                        }
-                    }
+                    SelectionRow(
+                        label = speaker.displayName,
+                        selected = speaker == selectedSpeaker,
+                        enabled = !isDisabled,
+                        sublabel = if (isDisabled) "Not supported with ${selectedService.displayName}" else null,
+                        onClick = { onSpeakerSelected(speaker) }
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                    )
                 }
             }
 
             if (selectedSpeaker == MusicSpeaker.CHROMECAST) {
-                Spacer(modifier = Modifier.height(24.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = "Default Google TV device", style = MaterialTheme.typography.titleMedium)
-                    IconButton(onClick = onRefreshChromecast) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                    }
-                }
-
-                if (chromecastDevices.isEmpty()) {
-                    Text(
-                        text = "No Google TV devices found. Make sure ADB debugging is enabled in Developer Options on your TV, then tap refresh.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                } else {
-                    Column(Modifier.selectableGroup()) {
-                        chromecastDevices.forEach { device ->
-                            val isSelected = device.id == selectedChromecastId
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(56.dp)
-                                    .selectable(
-                                        selected = isSelected,
-                                        onClick = { onChromecastDeviceSelected(device.id) },
-                                        role = Role.RadioButton
-                                    )
-                                    .padding(horizontal = 16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(selected = isSelected, onClick = null)
-                                Column(modifier = Modifier.padding(start = 16.dp)) {
-                                    Text(text = device.name, style = MaterialTheme.typography.bodyLarge)
-                                    Text(
-                                        text = device.model,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
+                Spacer(Modifier.height(24.dp))
+                DeviceSection(
+                    title = "Google TV Device",
+                    emptyText = "No Google TV devices found. Enable ADB debugging in Developer Options on your TV, then tap refresh.",
+                    devices = chromecastDevices.map { it.id to it.name },
+                    subtitles = chromecastDevices.associate { it.id to it.model },
+                    selectedId = selectedChromecastId,
+                    onSelect = onChromecastDeviceSelected,
+                    onRefresh = onRefreshChromecast
+                )
                 if (selectedService == MusicService.SPOTIFY) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    HorizontalDivider()
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(Modifier.height(12.dp))
                     Text(
-                        text = "Spotify opens directly on your Google TV via ADB. Enable \"ADB debugging\" in Developer Options on the TV — on first use, approve the \"Allow ADB debugging?\" prompt that appears on screen.",
+                        text = "Spotify opens directly on your Google TV via ADB. Enable \"ADB debugging\" in Developer Options on the TV — on first use, approve the prompt on screen.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 20.dp)
                     )
                 }
             }
 
             if (selectedSpeaker == MusicSpeaker.SONOS) {
-                Spacer(modifier = Modifier.height(24.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = "Default Sonos speaker", style = MaterialTheme.typography.titleMedium)
-                    IconButton(onClick = onRefreshSonos) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh Sonos")
-                    }
+                Spacer(Modifier.height(24.dp))
+                val sonosDevices = buildList {
+                    add(SONOS_ALL_SPEAKERS to "All speakers")
+                    sonosSpeakers.forEach { add(it.ip to it.name) }
                 }
-
-                if (sonosSpeakers.isEmpty()) {
-                    Text(
-                        text = "No Sonos speakers found on this network.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                } else {
-                    Column(Modifier.selectableGroup()) {
-                        val isAllSelected = selectedSonosIp == SONOS_ALL_SPEAKERS
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .height(56.dp)
-                                .selectable(
-                                    selected = isAllSelected,
-                                    onClick = { onSonosSpeakerSelected(SONOS_ALL_SPEAKERS) },
-                                    role = Role.RadioButton
-                                )
-                                .padding(horizontal = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(selected = isAllSelected, onClick = null)
-                            Text(
-                                text = "All speakers",
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.padding(start = 16.dp)
-                            )
-                        }
-
-                        sonosSpeakers.forEach { sonosSpeaker ->
-                            val isSelected = sonosSpeaker.ip == selectedSonosIp
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(56.dp)
-                                    .selectable(
-                                        selected = isSelected,
-                                        onClick = { onSonosSpeakerSelected(sonosSpeaker.ip) },
-                                        role = Role.RadioButton
-                                    )
-                                    .padding(horizontal = 16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(selected = isSelected, onClick = null)
-                                Column(modifier = Modifier.padding(start = 16.dp)) {
-                                    Text(text = sonosSpeaker.name, style = MaterialTheme.typography.bodyLarge)
-                                    Text(
-                                        text = sonosSpeaker.model,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                DeviceSection(
+                    title = "Sonos Speaker",
+                    emptyText = "No Sonos speakers found on this network.",
+                    devices = sonosDevices,
+                    subtitles = sonosSpeakers.associate { it.ip to it.model },
+                    selectedId = selectedSonosIp,
+                    onSelect = onSonosSpeakerSelected,
+                    onRefresh = onRefreshSonos
+                )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
 
-            Text(
-                text = "Default movie player",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(bottom = 8.dp)
+// ─── Default player Sub-page ───────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MoviePlayerScreen(
+    onBackClick: () -> Unit,
+    selectedMoviePlayer: MoviePlayer,
+    onMoviePlayerSelected: (MoviePlayer) -> Unit,
+    chromecastDevices: List<ChromecastDevice>,
+    selectedChromecastId: String?,
+    onChromecastDeviceSelected: (String) -> Unit,
+    onRefreshChromecast: () -> Unit,
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Default movie player") },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground)
             )
+        },
+        containerColor = TangibleBackground
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+        ) {
             Column(Modifier.selectableGroup()) {
                 MoviePlayer.entries.forEach { player ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(56.dp)
-                            .selectable(
-                                selected = (player == selectedMoviePlayer),
-                                onClick = { onMoviePlayerSelected(player) },
-                                role = Role.RadioButton
-                            )
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(selected = (player == selectedMoviePlayer), onClick = null)
-                        Text(
-                            text = player.displayName,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(start = 16.dp)
-                        )
-                    }
+                    SelectionRow(
+                        label = player.displayName,
+                        selected = player == selectedMoviePlayer,
+                        onClick = { onMoviePlayerSelected(player) }
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                    )
                 }
             }
 
             if (selectedMoviePlayer == MoviePlayer.GOOGLE_TV) {
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = "Default Google TV device", style = MaterialTheme.typography.titleMedium)
-                    IconButton(onClick = onRefreshChromecast) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                    }
-                }
-
-                if (chromecastDevices.isEmpty()) {
-                    Text(
-                        text = "No Google TV devices found. Make sure ADB debugging is enabled in Developer Options on your TV, then tap refresh.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                } else {
-                    Column(Modifier.selectableGroup()) {
-                        chromecastDevices.forEach { device ->
-                            val isSelected = device.id == selectedChromecastId
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(56.dp)
-                                    .selectable(
-                                        selected = isSelected,
-                                        onClick = { onChromecastDeviceSelected(device.id) },
-                                        role = Role.RadioButton
-                                    )
-                                    .padding(horizontal = 16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(selected = isSelected, onClick = null)
-                                Column(modifier = Modifier.padding(start = 16.dp)) {
-                                    Text(text = device.name, style = MaterialTheme.typography.bodyLarge)
-                                    Text(
-                                        text = device.model,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider()
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(Modifier.height(24.dp))
+                DeviceSection(
+                    title = "Google TV Device",
+                    emptyText = "No Google TV devices found. Enable ADB debugging in Developer Options on your TV, then tap refresh.",
+                    devices = chromecastDevices.map { it.id to it.name },
+                    subtitles = chromecastDevices.associate { it.id to it.model },
+                    selectedId = selectedChromecastId,
+                    onSelect = onChromecastDeviceSelected,
+                    onRefresh = onRefreshChromecast
+                )
+                Spacer(Modifier.height(12.dp))
                 Text(
-                    text = "Movies open directly on your Google TV via ADB. Enable \"ADB debugging\" in Developer Options on the TV — on first use, approve the \"Allow ADB debugging?\" prompt that appears on screen.",
+                    text = "Movies open directly on your Google TV via ADB. Enable \"ADB debugging\" in Developer Options on the TV — on first use, approve the prompt on screen.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                text = "Movie streaming region",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            var regionExpanded by remember { mutableStateOf(false) }
-            val selectedRegionName = REGIONS.find { it.first == selectedRegion }?.second ?: selectedRegion
-
-            ExposedDropdownMenuBox(
-                expanded = regionExpanded,
-                onExpandedChange = { regionExpanded = it },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                OutlinedTextField(
-                    value = "$selectedRegionName ($selectedRegion)",
-                    onValueChange = {},
-                    readOnly = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = regionExpanded) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                )
-                ExposedDropdownMenu(
-                    expanded = regionExpanded,
-                    onDismissRequest = { regionExpanded = false }
-                ) {
-                    REGIONS.forEach { (code, name) ->
-                        DropdownMenuItem(
-                            text = { Text("$name ($code)") },
-                            onClick = {
-                                if (code != selectedRegion) showRegionWarning = code
-                                regionExpanded = false
-                            },
-                            contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Button(
-                onClick = onMovieProvidersClick,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Movie providers")
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(Modifier.height(16.dp))
         }
+    }
+}
+
+// ─── Movie Region Sub-page ───────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MovieRegionScreen(
+    onBackClick: () -> Unit,
+    selectedRegion: String,
+    onRegionSelected: (String) -> Unit,
+) {
+    var pendingRegion by remember { mutableStateOf<String?>(null) }
+
+    if (pendingRegion != null) {
+        AlertDialog(
+            onDismissRequest = { pendingRegion = null },
+            title = { Text("Change region?") },
+            text = { Text("Changing the region will clear your custom movie provider preferences.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onRegionSelected(pendingRegion!!)
+                    pendingRegion = null
+                }) { Text("Change") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRegion = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Movie streaming region") },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground)
+            )
+        },
+        containerColor = TangibleBackground
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .selectableGroup()
+        ) {
+            REGIONS.forEach { (code, name) ->
+                SelectionRow(
+                    label = name,
+                    sublabel = code,
+                    selected = code == selectedRegion,
+                    onClick = { if (code != selectedRegion) pendingRegion = code }
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                )
+            }
+        }
+    }
+}
+
+// ─── Shared components ────────────────────────────────────────────────────────
+
+@Composable
+private fun SelectionRow(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    sublabel: String? = null,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(
+                selected = selected,
+                enabled = enabled,
+                onClick = onClick,
+                role = Role.RadioButton
+            )
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(selected = selected, onClick = null, enabled = enabled)
+        Column(modifier = Modifier.padding(start = 16.dp)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface
+                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+            )
+            if (sublabel != null) {
+                Text(
+                    text = sublabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                        alpha = if (enabled) 1f else 0.38f
+                    )
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeviceSection(
+    title: String,
+    emptyText: String,
+    devices: List<Pair<String, String>>,
+    subtitles: Map<String, String>,
+    selectedId: String?,
+    onSelect: (String) -> Unit,
+    onRefresh: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title.uppercase(),
+            style = MaterialTheme.typography.labelMedium,
+            color = TangiblePurple
+        )
+        IconButton(onClick = onRefresh) {
+            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+        }
+    }
+    if (devices.isEmpty()) {
+        Text(
+            text = emptyText,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+        )
+    } else {
+        Column(Modifier.selectableGroup()) {
+            devices.forEach { (id, name) ->
+                SelectionRow(
+                    label = name,
+                    sublabel = subtitles[id],
+                    selected = id == selectedId,
+                    onClick = { onSelect(id) }
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                )
+            }
+        }
+    }
 }

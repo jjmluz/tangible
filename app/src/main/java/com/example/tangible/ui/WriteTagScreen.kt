@@ -282,7 +282,7 @@ private fun MusicContent(
     OutlinedTextField(
         value = searchQuery,
         onValueChange = onSearchQueryChange,
-        label = { Text("Search Album (Discogs)") },
+        label = { Text("Search artist or album") },
         modifier = Modifier.fillMaxWidth(),
         trailingIcon = {
             if (isSearching || isLoadingFirstTrack) {
@@ -407,7 +407,7 @@ private fun MovieContent(
     OutlinedTextField(
         value = searchQuery,
         onValueChange = onSearchQueryChange,
-        label = { Text("Search Movie (TMDB)") },
+        label = { Text("Search movie") },
         modifier = Modifier.fillMaxWidth(),
         trailingIcon = {
             if (isSearching) {

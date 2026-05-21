@@ -38,7 +38,7 @@ fun MovieProvidersScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Movie Providers ($region)") },
+                title = { Text("Movie streaming services ($region)") },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")

@@ -57,10 +57,14 @@ import com.example.tangible.data.TmdbMovieResult
 import com.example.tangible.data.TmdbRepository
 import com.example.tangible.data.YouTubeRepository
 import com.example.tangible.ui.MainScreen
+import com.example.tangible.ui.MoviePlayerScreen
 import com.example.tangible.ui.MovieProvidersScreen
 import com.example.tangible.ui.MoviePlayer
+import com.example.tangible.ui.MovieRegionScreen
 import com.example.tangible.ui.MusicService
+import com.example.tangible.ui.MusicServiceScreen
 import com.example.tangible.ui.MusicSpeaker
+import com.example.tangible.ui.MusicSpeakerScreen
 import com.example.tangible.ui.SettingsScreen
 import com.example.tangible.ui.WriteTagScreen
 import com.google.gson.Gson
@@ -880,9 +884,28 @@ fun TangibleApp(
             }
             composable("settings") {
                 SettingsScreen(
-                    onMovieProvidersClick = { navController.navigate("movie_providers") },
                     selectedService = selectedService,
-                    onServiceSelected = onServiceSelected,
+                    selectedSpeaker = selectedSpeaker,
+                    selectedMoviePlayer = selectedMoviePlayer,
+                    selectedRegion = selectedRegion,
+                    onMusicServiceClick = { navController.navigate("music_service") },
+                    onMusicSpeakerClick = { navController.navigate("music_speaker") },
+                    onMoviePlayerClick = { navController.navigate("movie_player") },
+                    onMovieRegionClick = { navController.navigate("movie_region") },
+                    onMovieProvidersClick = { navController.navigate("movie_providers") }
+                )
+            }
+            composable("music_service") {
+                MusicServiceScreen(
+                    onBackClick = { navController.popBackStack() },
+                    selectedService = selectedService,
+                    onServiceSelected = onServiceSelected
+                )
+            }
+            composable("music_speaker") {
+                MusicSpeakerScreen(
+                    onBackClick = { navController.popBackStack() },
+                    selectedService = selectedService,
                     selectedSpeaker = selectedSpeaker,
                     onSpeakerSelected = onSpeakerSelected,
                     sonosSpeakers = sonosSpeakers,
@@ -892,9 +915,23 @@ fun TangibleApp(
                     chromecastDevices = chromecastDevices,
                     selectedChromecastId = selectedChromecastId,
                     onChromecastDeviceSelected = onChromecastDeviceSelected,
-                    onRefreshChromecast = onRefreshChromecast,
+                    onRefreshChromecast = onRefreshChromecast
+                )
+            }
+            composable("movie_player") {
+                MoviePlayerScreen(
+                    onBackClick = { navController.popBackStack() },
                     selectedMoviePlayer = selectedMoviePlayer,
                     onMoviePlayerSelected = onMoviePlayerSelected,
+                    chromecastDevices = chromecastDevices,
+                    selectedChromecastId = selectedChromecastId,
+                    onChromecastDeviceSelected = onChromecastDeviceSelected,
+                    onRefreshChromecast = onRefreshChromecast
+                )
+            }
+            composable("movie_region") {
+                MovieRegionScreen(
+                    onBackClick = { navController.popBackStack() },
                     selectedRegion = selectedRegion,
                     onRegionSelected = onRegionSelected
                 )
