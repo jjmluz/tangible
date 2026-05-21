@@ -799,17 +799,30 @@ fun TangibleApp(
             if (showChrome) {
                 TopAppBar(
                     title = {
-                        Text(
-                            text = if (currentRoute == "settings") "Settings" else "Tangible",
-                            style = if (currentRoute == "home")
-                                MaterialTheme.typography.headlineMedium
-                            else
-                                MaterialTheme.typography.titleLarge,
-                            color = if (currentRoute == "home")
-                                TangiblePurple
-                            else
-                                MaterialTheme.colorScheme.onBackground
-                        )
+                        if (currentRoute == "home") {
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Text(
+                                    text = "Tangible",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    color = TangiblePurple
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Tap to Play",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Light,
+                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                    color = Color(0xFF888899),
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = "Settings",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = TangibleBackground
