@@ -38,8 +38,7 @@ class YouTubeRepository(private val apiKey: String) {
             } ?: response.items.firstOrNull()
 
             officialResult?.id?.playlistId?.let { playlistId ->
-                // Construct an autoplaying watch link
-                "https://music.youtube.com/watch?v=0&list=$playlistId&autoplay=1"
+                "https://music.youtube.com/playlist?list=$playlistId"
             }
         } catch (e: Exception) {
             null

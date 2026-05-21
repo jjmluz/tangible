@@ -20,18 +20,25 @@ class AdbRepository(private val context: Context) {
         return AdbKeyPair.read(privateKeyFile, publicKeyFile)
     }
 
-    suspend fun launchSpotify(host: String, spotifyUri: String): Boolean =
+    suspend fun launchUri(host: String, uri: String, packageName: String = ""): Boolean =
         withContext(Dispatchers.IO) {
             var dadb: Dadb? = null
             try {
                 val keyPair = getOrCreateKeyPair()
                 dadb = Dadb.create(host, 5555, keyPair)
-                val escaped = spotifyUri.replace("'", "'\\''")
-                val result = dadb.shell(
-                    "am start -a android.intent.action.VIEW -d '$escaped' com.spotify.tv.android"
-                )
-                Log.d(TAG, "am start exit=${result.exitCode} output=${result.allOutput}")
-                result.exitCode == 0
+                val escaped = uri.replace("'", "'\\''")
+                val cmd = if (packageName.isNotBlank())
+                    "am start -a android.intent.action.VIEW -d '$escaped' $packageName"
+                else
+                    "am start -a android.intent.action.VIEW -d '$escaped'"
+                val result = dadb.shell(cmd)
+                val output = result.allOutput
+                Log.d(TAG, "am start exit=${result.exitCode} output=$output")
+                // am start can exit 0 even on failure — also check the output
+                val failed = result.exitCode != 0 ||
+                    (output.contains("Error", ignoreCase = true) &&
+                     output.contains("not started", ignoreCase = true))
+                !failed
             } catch (e: Exception) {
                 Log.e(TAG, "Launch failed: ${e.message}")
                 false

@@ -148,8 +148,12 @@ class MainActivity : ComponentActivity() {
                         onServiceSelected = {
                             selectedService = it
                             prefs.edit().putString("selected_service", it.name).apply()
-                            if (it == MusicService.YOUTUBE_MUSIC &&
-                                (selectedSpeaker == MusicSpeaker.SONOS || selectedSpeaker == MusicSpeaker.CHROMECAST)) {
+                            val speakerInvalid = when (it) {
+                                MusicService.YOUTUBE_MUSIC -> selectedSpeaker == MusicSpeaker.SONOS
+                                MusicService.APPLE_MUSIC -> selectedSpeaker == MusicSpeaker.SONOS || selectedSpeaker == MusicSpeaker.CHROMECAST
+                                else -> false
+                            }
+                            if (speakerInvalid) {
                                 selectedSpeaker = MusicSpeaker.THIS_DEVICE
                                 prefs.edit().putString("selected_speaker", MusicSpeaker.THIS_DEVICE.name).apply()
                             }
@@ -207,22 +211,27 @@ class MainActivity : ComponentActivity() {
                         onAlbumSelected = { discogsAlbum ->
                             val spotifyResults = spotifyRepository.searchAlbums(discogsAlbum.title)
                             val album = spotifyResults.firstOrNull()
-                            val spotifyAlbumUri = album?.uri
-                            val spotifyTrackUri = album?.let { spotifyRepository.getFirstTrackUri(it.id) }
+                            val spotifyAlbumId = album?.id
+                            val spotifyTrackId = album?.let { spotifyRepository.getFirstTrackUri(it.id) }
+                                ?.removePrefix("spotify:track:")
 
                             val parts = discogsAlbum.title.split(" - ", limit = 2)
                             val (artist, title) = if (parts.size == 2) parts[0] to parts[1] else "" to discogsAlbum.title
 
-                            val ytmUri = youtubeRepository.searchAlbum(title, artist)
+                            val ytmUrl = youtubeRepository.searchAlbum(title, artist)
+                            val ytmId = ytmUrl?.let { Uri.parse(it).getQueryParameter("list") }
                                 ?: "https://music.youtube.com/search?q=${Uri.encode(discogsAlbum.title)}"
-                            val appleMusicUri = appleMusicRepository.searchAlbum(title, artist)
-                                ?: "https://music.apple.com/search?term=${Uri.encode(discogsAlbum.title)}"
+
+                            val appleMusicUrl = appleMusicRepository.searchAlbum(title, artist)
+                            val appleMusicId = appleMusicUrl?.let { u ->
+                                Uri.parse(u).lastPathSegment?.takeIf { seg -> seg.all { it.isDigit() } }
+                            } ?: "https://music.apple.com/search?term=${Uri.encode(discogsAlbum.title)}"
 
                             TagMediaUris(
-                                spotifyTrack = spotifyTrackUri,
-                                spotifyAlbum = spotifyAlbumUri,
-                                ytm = ytmUri,
-                                appleMusic = appleMusicUri
+                                spotifyTrack = spotifyTrackId,
+                                spotifyAlbum = spotifyAlbumId,
+                                ytm = ytmId,
+                                appleMusic = appleMusicId
                             )
                         },
                         movieProviders = movieProviders,
@@ -278,20 +287,35 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun playOnChromecast(spotifyUri: String) {
+    private fun playOnChromecast(uri: String, service: MusicService) {
         val host = chromecastDevices.firstOrNull { it.id == selectedChromecastId }?.host
             ?: selectedChromecastHost
         if (host == null) {
             Toast.makeText(this, "Please select a Google TV device in Settings", Toast.LENGTH_LONG).show()
             return
         }
+        val packageName = when (service) {
+            MusicService.SPOTIFY -> "com.spotify.tv.android"
+            MusicService.YOUTUBE_MUSIC -> "com.google.android.youtube.tv"
+            MusicService.APPLE_MUSIC -> "com.apple.android.music"
+        }
         lifecycleScope.launch {
-            Toast.makeText(this@MainActivity, "Launching Spotify on TV…", Toast.LENGTH_SHORT).show()
-            val ok = adbRepository.launchSpotify(host, spotifyUri)
+            Toast.makeText(this@MainActivity, "Launching ${service.displayName} on TV…", Toast.LENGTH_SHORT).show()
+            val resolvedUri = when (service) {
+                MusicService.YOUTUBE_MUSIC -> {
+                    val listId = if (uri.startsWith("http")) Uri.parse(uri).getQueryParameter("list") else uri
+                    if (listId != null) "https://www.youtube.com/playlist?list=$listId"
+                    else uri.replace("music.youtube.com", "www.youtube.com")
+                }
+                MusicService.APPLE_MUSIC ->
+                    if (uri.startsWith("http")) uri else "https://music.apple.com/album/$uri"
+                else -> uri
+            }
+            val ok = adbRepository.launchUri(host, resolvedUri, packageName)
             if (!ok) {
                 Toast.makeText(
                     this@MainActivity,
-                    "Could not launch Spotify. Enable ADB debugging in Developer Options on your Google TV.",
+                    "Could not launch ${service.displayName}. Enable ADB debugging in Developer Options on your Google TV.",
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -369,9 +393,11 @@ class MainActivity : ComponentActivity() {
 
         fun parseTangibleUri(uri: Uri) {
             if (uri.scheme == "tangible" && (uri.host == "play" || uri.host == null)) {
+                val spotifyTrackId = uri.getQueryParameter("spotify_track")
+                val spotifyAlbumId = uri.getQueryParameter("spotify_album")
                 uris = TagMediaUris(
-                    spotifyTrack = uri.getQueryParameter("spotify_track") ?: uri.getQueryParameter("spotify") ?: uri.getQueryParameter("query"),
-                    spotifyAlbum = uri.getQueryParameter("spotify_album"),
+                    spotifyTrack = spotifyTrackId?.let { "spotify:track:$it" },
+                    spotifyAlbum = spotifyAlbumId?.let { "spotify:album:$it" },
                     ytm = uri.getQueryParameter("ytm"),
                     appleMusic = uri.getQueryParameter("apple_music")
                 )
@@ -406,6 +432,11 @@ class MainActivity : ComponentActivity() {
                     uris = if (pathSegments[0] == "album") TagMediaUris(spotifyAlbum = spotifyUri)
                            else TagMediaUris(spotifyTrack = spotifyUri)
                 }
+            } else if (uri.scheme == "https" && uri.host == "music.youtube.com") {
+                uris = TagMediaUris(ytm = uri.getQueryParameter("list") ?: uri.toString())
+            } else if (uri.scheme == "https" && uri.host?.endsWith("music.apple.com") == true) {
+                val albumId = uri.lastPathSegment?.takeIf { seg -> seg.all { it.isDigit() } }
+                uris = TagMediaUris(appleMusic = albumId ?: uri.toString())
             }
         }
 
@@ -448,13 +479,13 @@ class MainActivity : ComponentActivity() {
                     uris.appleMusic?.let { playOnSonos(it) }
                 }
                 selectedService == MusicService.SPOTIFY && selectedSpeaker == MusicSpeaker.CHROMECAST -> {
-                    (uris.spotifyAlbum ?: uris.spotifyTrack)?.let { playOnChromecast(it) }
+                    (uris.spotifyTrack ?: uris.spotifyAlbum)?.let { playOnChromecast(it, MusicService.SPOTIFY) }
+                }
+                selectedService == MusicService.YOUTUBE_MUSIC && selectedSpeaker == MusicSpeaker.CHROMECAST -> {
+                    uris.ytm?.let { playOnChromecast(it, MusicService.YOUTUBE_MUSIC) }
                 }
                 selectedService == MusicService.APPLE_MUSIC && selectedSpeaker == MusicSpeaker.CHROMECAST -> {
-                    uris.appleMusic?.let {
-                        playOnAppleMusic(it)
-                        Toast.makeText(this, "Please tap the Cast button in Apple Music", Toast.LENGTH_LONG).show()
-                    }
+                    uris.appleMusic?.let { playOnChromecast(it, MusicService.APPLE_MUSIC) }
                 }
                 else -> Log.w("Tangible", "No action for service $selectedService and speaker $selectedSpeaker")
             }
@@ -496,11 +527,15 @@ class MainActivity : ComponentActivity() {
             return
         }
         lifecycleScope.launch {
-            val finalUri = if (selectedService == MusicService.SPOTIFY) {
-                if (musicUri.startsWith("spotify:")) musicUri
-                else spotifyRepository.searchAlbums(musicUri).firstOrNull()?.uri
-            } else {
-                musicUri
+            val finalUri = when (selectedService) {
+                MusicService.SPOTIFY -> {
+                    if (musicUri.startsWith("spotify:")) musicUri
+                    else spotifyRepository.searchAlbums(musicUri).firstOrNull()?.uri
+                }
+                MusicService.APPLE_MUSIC -> {
+                    if (musicUri.startsWith("http")) musicUri else "https://music.apple.com/album/$musicUri"
+                }
+                else -> musicUri
             }
             if (finalUri == null) {
                 Log.e("Tangible", "Could not resolve URI for $musicUri")
@@ -537,7 +572,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun playOnAppleMusic(url: String) {
+    private fun playOnAppleMusic(value: String) {
+        val url = if (value.startsWith("http")) value else "https://music.apple.com/album/$value"
         try {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
                 setPackage("com.apple.android.music")
@@ -578,13 +614,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun playOnYouTubeMusic(uriString: String) {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uriString)).apply {
+    private fun playOnYouTubeMusic(ytmValue: String) {
+        val listId = if (ytmValue.startsWith("http")) Uri.parse(ytmValue).getQueryParameter("list")
+                     else ytmValue
+        val url = if (listId != null) "https://music.youtube.com/watch?v=0&list=$listId&autoplay=1"
+                  else ytmValue
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
             setPackage("com.google.android.apps.youtube.music")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         try { startActivity(intent) } catch (e: Exception) {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uriString)).apply {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             })
         }
@@ -606,32 +646,44 @@ class MainActivity : ComponentActivity() {
     private fun writeToTag(tag: Tag, data: String) {
         Log.d("Tangible", "Writing to tag: $data")
         val ndef = Ndef.get(tag)
-        val record = NdefRecord.createUri(data)
-        val records = mutableListOf(record)
-        if (data.startsWith("tangible:")) records.add(NdefRecord.createApplicationRecord(packageName))
-        val message = NdefMessage(records.toTypedArray())
+        var formatable: NdefFormatable? = null
         try {
+            val record = NdefRecord.createUri(data)
+            val records = mutableListOf(record)
+            if (data.startsWith("tangible:")) records.add(NdefRecord.createApplicationRecord(packageName))
+            val message = NdefMessage(records.toTypedArray())
             if (ndef != null) {
                 ndef.connect()
-                if (!ndef.isWritable) { writeError = "Tag is read-only"; return }
-                if (ndef.maxSize < message.toByteArray().size) { writeError = "Tag capacity too small (${ndef.maxSize} bytes)"; return }
+                if (!ndef.isWritable) {
+                    writeError = "Tag is read-only"
+                    isWritingMode = false
+                    return
+                }
+                if (ndef.maxSize < message.toByteArray().size) {
+                    writeError = "Tag capacity too small (${ndef.maxSize} bytes)"
+                    isWritingMode = false
+                    return
+                }
                 ndef.writeNdefMessage(message)
                 finishWriting()
             } else {
-                val formatable = NdefFormatable.get(tag)
+                formatable = NdefFormatable.get(tag)
                 if (formatable != null) {
                     formatable.connect()
                     formatable.format(message)
                     finishWriting()
                 } else {
                     writeError = "Tag doesn't support NDEF"
+                    isWritingMode = false
                 }
             }
         } catch (e: Exception) {
             Log.e("Tangible", "Error writing to tag", e)
             writeError = "Failed to write: ${e.message}"
+            isWritingMode = false
         } finally {
             try { ndef?.close() } catch (e: Exception) { }
+            try { formatable?.close() } catch (e: Exception) { }
         }
     }
 

@@ -99,17 +99,19 @@ fun WriteTagScreen(
                 selectedUris.appleMusic?.let { queryParams.add("apple_music=${Uri.encode(it)}") }
                 if (queryParams.isNotEmpty()) "tangible://play?${queryParams.joinToString("&")}" else ""
             }
-            WriteAsOption.SPOTIFY -> {
-                val uri = selectedUris.spotifyTrack ?: selectedUris.spotifyAlbum
-                uri?.let { u ->
-                    val parts = u.split(":")
-                    if (parts.size >= 3 && parts[0] == "spotify") {
-                        "https://open.spotify.com/${parts[1]}/${parts[2]}"
-                    } else u
-                } ?: ""
+            WriteAsOption.SPOTIFY -> when {
+                selectedUris.spotifyAlbum != null -> "https://open.spotify.com/album/${selectedUris.spotifyAlbum}"
+                selectedUris.spotifyTrack != null -> "https://open.spotify.com/track/${selectedUris.spotifyTrack}"
+                else -> ""
             }
-            WriteAsOption.YOUTUBE_MUSIC -> selectedUris.ytm ?: ""
-            WriteAsOption.APPLE_MUSIC -> selectedUris.appleMusic ?: ""
+            WriteAsOption.YOUTUBE_MUSIC -> {
+                val id = selectedUris.ytm
+                if (id != null && !id.startsWith("http")) "https://music.youtube.com/playlist?list=$id" else id ?: ""
+            }
+            WriteAsOption.APPLE_MUSIC -> {
+                val id = selectedUris.appleMusic
+                if (id != null && !id.startsWith("http")) "https://music.apple.com/album/$id" else id ?: ""
+            }
         }
     }
 

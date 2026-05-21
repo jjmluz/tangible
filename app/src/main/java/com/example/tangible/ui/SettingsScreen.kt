@@ -28,7 +28,7 @@ enum class MusicService(val displayName: String) {
 enum class MusicSpeaker(val displayName: String) {
     THIS_DEVICE("This device"),
     SONOS("Sonos"),
-    CHROMECAST("Chromecast")
+    CHROMECAST("Google TV")
 }
 
 private val REGIONS = listOf(
@@ -155,8 +155,12 @@ fun SettingsScreen(
             )
             Column(Modifier.selectableGroup()) {
                 MusicSpeaker.entries.forEach { speaker ->
-                    val isDisabled = (speaker == MusicSpeaker.SONOS || speaker == MusicSpeaker.CHROMECAST) &&
-                        selectedService == MusicService.YOUTUBE_MUSIC
+                    val isDisabled = when (speaker) {
+                        MusicSpeaker.SONOS -> selectedService == MusicService.YOUTUBE_MUSIC ||
+                            selectedService == MusicService.APPLE_MUSIC
+                        MusicSpeaker.CHROMECAST -> selectedService == MusicService.APPLE_MUSIC
+                        else -> false
+                    }
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -179,7 +183,7 @@ fun SettingsScreen(
                             )
                             if (isDisabled) {
                                 Text(
-                                    text = "Not supported with YouTube Music",
+                                    text = "Not supported with ${selectedService.displayName}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                                 )
@@ -196,7 +200,7 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = "Google TV device", style = MaterialTheme.typography.titleMedium)
+                    Text(text = "Default Google TV device", style = MaterialTheme.typography.titleMedium)
                     IconButton(onClick = onRefreshChromecast) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
