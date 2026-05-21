@@ -142,10 +142,16 @@ class SonosDiscovery(private val context: Context) {
             val xml = connection.getInputStream().bufferedReader().use { it.readText() }
             
             if (xml.contains("Sonos") || xml.contains("ZonePlayer")) {
-                val friendlyName = xml.substringAfter("<friendlyName>").substringBefore("</friendlyName>")
+                // roomName element can have any namespace prefix (r:, rincon:, or none)
+                val roomName = Regex("""<[^:>]*:?roomName>([^<]+)</""").find(xml)?.groupValues?.get(1)?.trim() ?: ""
+                val friendlyName = roomName.ifEmpty {
+                    xml.substringAfter("<friendlyName>").substringBefore("</friendlyName>")
+                }
                 val modelName = xml.substringAfter("<modelName>").substringBefore("</modelName>")
                 val ip = URL(url).host
-                Log.d(TAG, "Successfully fetched description for $friendlyName at $ip")
+                Log.d(TAG, "XML snippet: ${xml.take(2000)}")
+                Log.d(TAG, "roomName='$roomName' friendlyName='$friendlyName' model='$modelName' ip=$ip")
+                if (modelName.contains("Sub", ignoreCase = true)) return null
                 return SonosSpeaker(ip, friendlyName, modelName)
             }
             null

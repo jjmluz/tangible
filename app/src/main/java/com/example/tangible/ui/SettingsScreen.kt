@@ -27,8 +27,13 @@ enum class MusicService(val displayName: String) {
 
 enum class MusicSpeaker(val displayName: String) {
     THIS_DEVICE("This device"),
-    SONOS("Sonos"),
-    CHROMECAST("Google TV")
+    CHROMECAST("Google TV"),
+    SONOS("Sonos")
+}
+
+enum class MoviePlayer(val displayName: String) {
+    THIS_DEVICE("This device"),
+    GOOGLE_TV("Google TV")
 }
 
 private val REGIONS = listOf(
@@ -76,6 +81,8 @@ fun SettingsScreen(
     selectedChromecastId: String?,
     onChromecastDeviceSelected: (String) -> Unit,
     onRefreshChromecast: () -> Unit,
+    selectedMoviePlayer: MoviePlayer,
+    onMoviePlayerSelected: (MoviePlayer) -> Unit,
     selectedRegion: String,
     onRegionSelected: (String) -> Unit
 ) {
@@ -233,7 +240,7 @@ fun SettingsScreen(
                                 Column(modifier = Modifier.padding(start = 16.dp)) {
                                     Text(text = device.name, style = MaterialTheme.typography.bodyLarge)
                                     Text(
-                                        text = device.host,
+                                        text = device.model,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -325,6 +332,99 @@ fun SettingsScreen(
                         }
                     }
                 }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "Default movie player",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Column(Modifier.selectableGroup()) {
+                MoviePlayer.entries.forEach { player ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .selectable(
+                                selected = (player == selectedMoviePlayer),
+                                onClick = { onMoviePlayerSelected(player) },
+                                role = Role.RadioButton
+                            )
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = (player == selectedMoviePlayer), onClick = null)
+                        Text(
+                            text = player.displayName,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(start = 16.dp)
+                        )
+                    }
+                }
+            }
+
+            if (selectedMoviePlayer == MoviePlayer.GOOGLE_TV) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "Default Google TV device", style = MaterialTheme.typography.titleMedium)
+                    IconButton(onClick = onRefreshChromecast) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                    }
+                }
+
+                if (chromecastDevices.isEmpty()) {
+                    Text(
+                        text = "No Google TV devices found. Make sure ADB debugging is enabled in Developer Options on your TV, then tap refresh.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                } else {
+                    Column(Modifier.selectableGroup()) {
+                        chromecastDevices.forEach { device ->
+                            val isSelected = device.id == selectedChromecastId
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp)
+                                    .selectable(
+                                        selected = isSelected,
+                                        onClick = { onChromecastDeviceSelected(device.id) },
+                                        role = Role.RadioButton
+                                    )
+                                    .padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(selected = isSelected, onClick = null)
+                                Column(modifier = Modifier.padding(start = 16.dp)) {
+                                    Text(text = device.name, style = MaterialTheme.typography.bodyLarge)
+                                    Text(
+                                        text = device.model,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Movies open directly on your Google TV via ADB. Enable \"ADB debugging\" in Developer Options on the TV — on first use, approve the \"Allow ADB debugging?\" prompt that appears on screen.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))

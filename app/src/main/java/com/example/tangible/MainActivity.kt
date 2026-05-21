@@ -44,6 +44,7 @@ import com.example.tangible.data.TmdbRepository
 import com.example.tangible.data.YouTubeRepository
 import com.example.tangible.ui.MainScreen
 import com.example.tangible.ui.MovieProvidersScreen
+import com.example.tangible.ui.MoviePlayer
 import com.example.tangible.ui.MusicService
 import com.example.tangible.ui.MusicSpeaker
 import com.example.tangible.ui.SettingsScreen
@@ -94,6 +95,7 @@ class MainActivity : ComponentActivity() {
     private var selectedChromecastId by mutableStateOf<String?>(null)
     private var selectedChromecastName by mutableStateOf<String?>(null)
     private var selectedChromecastHost: String? = null
+    private var selectedMoviePlayer by mutableStateOf(MoviePlayer.THIS_DEVICE)
     private var region by mutableStateOf("US")
     private var movieProviders by mutableStateOf<List<MovieProvider>>(emptyList())
 
@@ -130,6 +132,8 @@ class MainActivity : ComponentActivity() {
         selectedChromecastId = prefs.getString("selected_chromecast_id", null)
         selectedChromecastName = prefs.getString("selected_chromecast_name", null)
         selectedChromecastHost = prefs.getString("selected_chromecast_host", null)
+        val moviePlayerValue = prefs.getString("selected_movie_player", MoviePlayer.THIS_DEVICE.name)
+        selectedMoviePlayer = MoviePlayer.entries.find { it.name == moviePlayerValue } ?: MoviePlayer.THIS_DEVICE
         region = prefs.getString("region", "US") ?: "US"
         loadMovieProviders()
 
@@ -185,6 +189,11 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onRefreshChromecast = { refreshChromecastDevices() },
+                        selectedMoviePlayer = selectedMoviePlayer,
+                        onMoviePlayerSelected = {
+                            selectedMoviePlayer = it
+                            prefs.edit().putString("selected_movie_player", it.name).apply()
+                        },
                         onStartWriting = { url ->
                             dataToWrite = url
                             isWritingMode = true
@@ -453,7 +462,11 @@ class MainActivity : ComponentActivity() {
         }
 
         if (movieToPlay != null && !isWritingMode) {
-            playMovie(movieToPlay!!)
+            if (selectedMoviePlayer == MoviePlayer.GOOGLE_TV) {
+                playMovieOnGoogleTv(movieToPlay!!)
+            } else {
+                playMovie(movieToPlay!!)
+            }
             return
         }
 
@@ -493,6 +506,26 @@ class MainActivity : ComponentActivity() {
         }
 
         Log.d("Tangible", "No URIs found or in writing mode. uris=$uris, isWritingMode=$isWritingMode")
+    }
+
+    private fun playMovieOnGoogleTv(url: String) {
+        val host = chromecastDevices.firstOrNull { it.id == selectedChromecastId }?.host
+            ?: selectedChromecastHost
+        if (host == null) {
+            Toast.makeText(this, "Please select a Google TV device in Settings", Toast.LENGTH_LONG).show()
+            return
+        }
+        lifecycleScope.launch {
+            Toast.makeText(this@MainActivity, "Opening movie on TV…", Toast.LENGTH_SHORT).show()
+            val ok = adbRepository.launchUri(host, url, "")
+            if (!ok) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "Could not open movie. Enable ADB debugging in Developer Options on your Google TV.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
     }
 
     private fun playMovie(url: String) {
@@ -712,6 +745,8 @@ fun TangibleApp(
     selectedChromecastId: String?,
     onChromecastDeviceSelected: (String) -> Unit,
     onRefreshChromecast: () -> Unit,
+    selectedMoviePlayer: MoviePlayer,
+    onMoviePlayerSelected: (MoviePlayer) -> Unit,
     onStartWriting: (String) -> Unit,
     onCancelWriting: () -> Unit,
     onSearchAlbums: suspend (String) -> List<DiscogsSearchResult>,
@@ -765,6 +800,8 @@ fun TangibleApp(
                 selectedChromecastId = selectedChromecastId,
                 onChromecastDeviceSelected = onChromecastDeviceSelected,
                 onRefreshChromecast = onRefreshChromecast,
+                selectedMoviePlayer = selectedMoviePlayer,
+                onMoviePlayerSelected = onMoviePlayerSelected,
                 selectedRegion = selectedRegion,
                 onRegionSelected = onRegionSelected
             )

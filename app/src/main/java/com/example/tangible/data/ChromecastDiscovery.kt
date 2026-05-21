@@ -12,6 +12,7 @@ import java.util.concurrent.ConcurrentHashMap
 data class ChromecastDevice(
     val id: String,
     val name: String,
+    val model: String,
     val host: String,
     val port: Int
 )
@@ -64,6 +65,7 @@ class ChromecastDiscovery(private val context: Context) {
                         val device = ChromecastDevice(
                             id = info.serviceName,
                             name = friendlyName,
+                            model = model,
                             host = host,
                             port = info.port
                         )
