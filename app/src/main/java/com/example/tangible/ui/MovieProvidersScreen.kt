@@ -38,14 +38,23 @@ fun MovieProvidersScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Movie streaming services ($region)") },
+                title = {
+                    Text(
+                        "Movie streaming services ($region)",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground),
+                windowInsets = WindowInsets(0, 0, 0, 0)
             )
-        }
+        },
+        containerColor = TangibleBackground
     ) { padding ->
         if (isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

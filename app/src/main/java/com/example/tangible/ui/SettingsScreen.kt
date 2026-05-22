@@ -163,13 +163,20 @@ fun MusicServiceScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Default music streaming service") },
+                title = {
+                    Text(
+                        "Default music streaming service",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground),
+                windowInsets = WindowInsets(0, 0, 0, 0)
             )
         },
         containerColor = TangibleBackground
@@ -216,13 +223,20 @@ fun MusicSpeakerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Default music speaker") },
+                title = {
+                    Text(
+                        "Default music speaker",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground),
+                windowInsets = WindowInsets(0, 0, 0, 0)
             )
         },
         containerColor = TangibleBackground
@@ -315,13 +329,20 @@ fun MoviePlayerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Default movie player") },
+                title = {
+                    Text(
+                        "Default movie player",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground),
+                windowInsets = WindowInsets(0, 0, 0, 0)
             )
         },
         containerColor = TangibleBackground
@@ -402,13 +423,20 @@ fun MovieRegionScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Movie streaming region") },
+                title = {
+                    Text(
+                        "Movie streaming region",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground),
+                windowInsets = WindowInsets(0, 0, 0, 0)
             )
         },
         containerColor = TangibleBackground

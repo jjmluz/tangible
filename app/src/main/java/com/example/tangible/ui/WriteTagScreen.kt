@@ -165,14 +165,23 @@ fun WriteTagScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Write Tag") },
+                title = {
+                    Text(
+                        "Write Tag",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground),
+                windowInsets = WindowInsets(0, 0, 0, 0)
             )
-        }
+        },
+        containerColor = TangibleBackground
     ) { padding ->
         Column(
             modifier = Modifier
