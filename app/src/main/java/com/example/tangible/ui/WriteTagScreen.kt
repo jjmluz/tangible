@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Search
@@ -411,6 +412,61 @@ private fun WriteTagConfirmContent(
     modifier: Modifier = Modifier
 ) {
     val isLoading = isLoadingFirstTrack || isLoadingStreaming
+    var showWriteAsHelp by remember { mutableStateOf(false) }
+    var showUrlPreview by remember { mutableStateOf(false) }
+
+    if (showWriteAsHelp) {
+        AlertDialog(
+            onDismissRequest = { showWriteAsHelp = false },
+            title = { Text("Writing Options") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column {
+                        Text(
+                            "Tangible URI",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            "The 'smart' option. Stores IDs for multiple services. When scanned, Tangible chooses your preferred service and player automatically.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    Column {
+                        Text(
+                            "Direct Service URL",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            "The 'universal' option. Writes a standard link (e.g., spotify.com). Works on any phone even without Tangible installed.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showWriteAsHelp = false }) { Text("Got it") }
+            }
+        )
+    }
+
+    if (showUrlPreview) {
+        AlertDialog(
+            onDismissRequest = { showUrlPreview = false },
+            title = { Text("Encoded URL") },
+            text = {
+                Text(
+                    text = url.ifBlank { "No URL generated yet." },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showUrlPreview = false }) { Text("Close") }
+            }
+        )
+    }
 
     Column(
         modifier = modifier.padding(16.dp)
@@ -455,7 +511,7 @@ private fun WriteTagConfirmContent(
                         model = imageUrl,
                         contentDescription = null,
                         modifier = Modifier
-                            .size(220.dp)
+                            .size(280.dp)
                             .clip(RoundedCornerShape(12.dp)),
                         contentScale = ContentScale.Crop
                     )
@@ -499,26 +555,50 @@ private fun WriteTagConfirmContent(
             )
         }
 
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (tagType == TagType.MUSIC) {
-                WriteAsDropdown(
-                    writeAs = writeAs,
-                    onWriteAsChange = onWriteAsChange,
-                    modifier = Modifier.weight(1f)
-                )
-            } else {
-                Spacer(modifier = Modifier.weight(1f))
-            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (tagType == TagType.MUSIC) {
+                    WriteAsDropdown(
+                        writeAs = writeAs,
+                        onWriteAsChange = onWriteAsChange,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = { showWriteAsHelp = true }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.HelpOutline,
+                            contentDescription = "Help",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
 
-            UrlTooltipIcon(url = url)
+                IconButton(onClick = { showUrlPreview = true }) {
+                    Icon(
+                        imageVector = Icons.Default.Visibility,
+                        contentDescription = "View URL",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
 
             Button(
                 onClick = onWriteClick,
-                enabled = url.isNotBlank() && !isLoading
+                enabled = url.isNotBlank() && !isLoading,
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
             ) {
                 Text("Write Tag")
             }
@@ -542,9 +622,9 @@ private fun WriteAsDropdown(
         OutlinedTextField(
             value = when (writeAs) {
                 WriteAsOption.TANGIBLE -> "Tangible URI"
-                WriteAsOption.SPOTIFY -> "Spotify URI"
-                WriteAsOption.YOUTUBE_MUSIC -> "YouTube Music"
-                WriteAsOption.APPLE_MUSIC -> "Apple Music"
+                WriteAsOption.SPOTIFY -> "Spotify URL"
+                WriteAsOption.YOUTUBE_MUSIC -> "YouTube Music URL"
+                WriteAsOption.APPLE_MUSIC -> "Apple Music URL"
             },
             onValueChange = {},
             readOnly = true,
@@ -560,45 +640,20 @@ private fun WriteAsDropdown(
             onDismissRequest = { expanded = false }
         ) {
             DropdownMenuItem(
-                text = { Text("Tangible URI (Multi-player support)") },
+                text = { Text("Tangible URI") },
                 onClick = { onWriteAsChange(WriteAsOption.TANGIBLE); expanded = false }
             )
             DropdownMenuItem(
-                text = { Text("Spotify URI (Opens Spotify directly)") },
+                text = { Text("Spotify URL") },
                 onClick = { onWriteAsChange(WriteAsOption.SPOTIFY); expanded = false }
             )
             DropdownMenuItem(
-                text = { Text("YouTube Music URI (Opens YTM directly)") },
+                text = { Text("YouTube Music URL") },
                 onClick = { onWriteAsChange(WriteAsOption.YOUTUBE_MUSIC); expanded = false }
             )
             DropdownMenuItem(
-                text = { Text("Apple Music URI (Opens Apple Music directly)") },
+                text = { Text("Apple Music URL") },
                 onClick = { onWriteAsChange(WriteAsOption.APPLE_MUSIC); expanded = false }
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun UrlTooltipIcon(url: String) {
-    val tooltipState = rememberTooltipState()
-    val scope = rememberCoroutineScope()
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-        tooltip = {
-            PlainTooltip {
-                Text(url.ifBlank { "No URL yet" })
-            }
-        },
-        state = tooltipState
-    ) {
-        IconButton(onClick = { scope.launch { tooltipState.show() } }) {
-            Icon(
-                imageVector = Icons.Default.Visibility,
-                contentDescription = "View URL",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp)
             )
         }
     }
