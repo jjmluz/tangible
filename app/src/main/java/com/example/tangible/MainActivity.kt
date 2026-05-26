@@ -53,6 +53,7 @@ import com.example.tangible.data.SonosRepository
 import com.example.tangible.data.SonosSpeaker
 import com.example.tangible.data.SpotifyRepository
 import com.example.tangible.data.StreamingAvailabilityRepository
+import com.example.tangible.data.TagRepository
 import com.example.tangible.data.TmdbMovieResult
 import com.example.tangible.data.TmdbRepository
 import com.example.tangible.data.YouTubeRepository
@@ -66,6 +67,7 @@ import com.example.tangible.ui.MusicServiceScreen
 import com.example.tangible.ui.MusicSpeaker
 import com.example.tangible.ui.MusicSpeakerScreen
 import com.example.tangible.ui.SettingsScreen
+import com.example.tangible.ui.TagWriteInfo
 import com.example.tangible.ui.WriteTagScreen
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -80,6 +82,16 @@ data class TagMediaUris(
     val spotifyAlbum: String? = null,
     val ytm: String? = null,
     val appleMusic: String? = null
+)
+
+data class SavedTag(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val type: String, // "MUSIC" or "MOVIE"
+    val url: String,
+    val imageUrl: String? = null,
+    val createdAt: Long = System.currentTimeMillis()
 )
 
 const val SONOS_ALL_SPEAKERS = "ALL_SPEAKERS"
@@ -101,9 +113,12 @@ class MainActivity : ComponentActivity() {
     private var writeError by mutableStateOf<String?>(null)
     private var showSuccessDialog by mutableStateOf(false)
     private var dataToWrite: String? = null
+    private var pendingTagInfo: TagWriteInfo? = null
+    private var savedTags by mutableStateOf<List<SavedTag>>(emptyList())
 
     // Settings
     private val prefs by lazy { getSharedPreferences("tangible_prefs", MODE_PRIVATE) }
+    private val tagRepository by lazy { TagRepository(prefs) }
     private val gson = Gson()
     private var selectedService by mutableStateOf(MusicService.SPOTIFY)
     private var selectedSpeaker by mutableStateOf(MusicSpeaker.THIS_DEVICE)
@@ -154,6 +169,7 @@ class MainActivity : ComponentActivity() {
         selectedMoviePlayer = MoviePlayer.entries.find { it.name == moviePlayerValue } ?: MoviePlayer.THIS_DEVICE
         region = prefs.getString("region", "US") ?: "US"
         loadMovieProviders()
+        savedTags = tagRepository.loadAll()
 
         intent?.let { handleIntent(it) }
 
@@ -164,6 +180,8 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     TangibleApp(
+                        savedTags = savedTags,
+                        onPlay = { url -> playTagUrl(url) },
                         isWritingMode = isWritingMode,
                         writeError = writeError,
                         selectedService = selectedService,
@@ -212,8 +230,9 @@ class MainActivity : ComponentActivity() {
                             selectedMoviePlayer = it
                             prefs.edit().putString("selected_movie_player", it.name).apply()
                         },
-                        onStartWriting = { url ->
-                            dataToWrite = url
+                        onStartWriting = { info ->
+                            dataToWrite = info.url
+                            pendingTagInfo = info
                             isWritingMode = true
                             writeError = null
                         },
@@ -753,9 +772,28 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun playTagUrl(url: String) {
+        handleIntent(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }
+
     private fun finishWriting() {
+        val info = pendingTagInfo
+        if (info != null) {
+            val tag = SavedTag(
+                id = java.util.UUID.randomUUID().toString(),
+                title = info.title,
+                subtitle = info.subtitle,
+                type = info.type.name,
+                url = info.url,
+                imageUrl = info.imageUrl,
+                createdAt = System.currentTimeMillis()
+            )
+            tagRepository.save(tag)
+            savedTags = tagRepository.loadAll()
+        }
         isWritingMode = false
         dataToWrite = null
+        pendingTagInfo = null
         writeError = null
         showSuccessDialog = true
         Log.d("Tangible", "Successfully wrote to tag")
@@ -765,6 +803,8 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TangibleApp(
+    savedTags: List<SavedTag>,
+    onPlay: (String) -> Unit,
     isWritingMode: Boolean,
     writeError: String?,
     selectedService: MusicService,
@@ -781,7 +821,7 @@ fun TangibleApp(
     onRefreshChromecast: () -> Unit,
     selectedMoviePlayer: MoviePlayer,
     onMoviePlayerSelected: (MoviePlayer) -> Unit,
-    onStartWriting: (String) -> Unit,
+    onStartWriting: (TagWriteInfo) -> Unit,
     onCancelWriting: () -> Unit,
     onSearchAlbums: suspend (String) -> List<DiscogsSearchResult>,
     onSearchMovies: suspend (String) -> List<TmdbMovieResult>,
@@ -863,7 +903,7 @@ fun TangibleApp(
             modifier = Modifier.padding(innerPadding)
         ) {
             composable("home") {
-                MainScreen()
+                MainScreen(tags = savedTags, onPlay = onPlay)
             }
             composable("write_tag") {
                 WriteTagScreen(
@@ -873,7 +913,7 @@ fun TangibleApp(
                     },
                     isWriting = isWritingMode,
                     writeError = writeError,
-                    onWriteClick = { url -> onStartWriting(url) },
+                    onWriteClick = { info -> onStartWriting(info) },
                     onCancelClick = onCancelWriting,
                     onSearchAlbums = onSearchAlbums,
                     onSearchMovies = onSearchMovies,

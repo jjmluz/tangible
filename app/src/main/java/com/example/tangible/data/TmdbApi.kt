@@ -25,5 +25,6 @@ data class TmdbMovieResult(
     @SerializedName("release_date") val releaseDate: String
 ) {
     val posterUrl: String? get() = posterPath?.let { "https://image.tmdb.org/t/p/w92$it" }
+    val largePosterUrl: String? get() = posterPath?.let { "https://image.tmdb.org/t/p/w500$it" }
     val year: String get() = releaseDate.take(4)
 }

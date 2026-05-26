@@ -5,29 +5,40 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.tangible.TagMediaUris
 import com.example.tangible.data.DiscogsSearchResult
 import com.example.tangible.data.MovieStreamingResult
-import com.example.tangible.data.NFC_NTAG215_BYTES
-import com.example.tangible.data.StreamingOption
 import com.example.tangible.data.TmdbMovieResult
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 enum class TagType { MUSIC, MOVIE }
+
+data class TagWriteInfo(
+    val title: String,
+    val subtitle: String,
+    val type: TagType,
+    val imageUrl: String?,
+    val url: String
+)
 
 enum class WriteAsOption {
     TANGIBLE, SPOTIFY, YOUTUBE_MUSIC, APPLE_MUSIC
@@ -39,7 +50,7 @@ fun WriteTagScreen(
     onBackClick: () -> Unit,
     isWriting: Boolean = false,
     writeError: String? = null,
-    onWriteClick: (url: String) -> Unit,
+    onWriteClick: (TagWriteInfo) -> Unit,
     onCancelClick: () -> Unit = {},
     onSearchAlbums: suspend (String) -> List<DiscogsSearchResult> = { emptyList() },
     onAlbumSelected: suspend (DiscogsSearchResult) -> TagMediaUris = { TagMediaUris() },
@@ -59,31 +70,36 @@ fun WriteTagScreen(
     var isLoadingFirstTrack by remember { mutableStateOf(false) }
     var writeAs by remember { mutableStateOf(WriteAsOption.TANGIBLE) }
     var selectedUris by remember { mutableStateOf(TagMediaUris()) }
+    var selectedAlbum by remember { mutableStateOf<DiscogsSearchResult?>(null) }
 
     // Movie state
     var movieSearchQuery by remember { mutableStateOf("") }
     var movieSearchResults by remember { mutableStateOf<List<TmdbMovieResult>>(emptyList()) }
     var isSearchingMovies by remember { mutableStateOf(false) }
-    var isSelectingMovie by remember { mutableStateOf(false) }
     var selectedMovie by remember { mutableStateOf<TmdbMovieResult?>(null) }
     var streamingResult by remember { mutableStateOf<MovieStreamingResult?>(null) }
     var isLoadingStreaming by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
 
+    val showConfirmScreen = when (tagType) {
+        TagType.MUSIC -> selectedAlbum != null
+        TagType.MOVIE -> selectedMovie != null
+    }
+
     // Reset state when switching tag types
     LaunchedEffect(tagType) {
         url = ""
+        selectedAlbum = null
+        selectedMovie = null
+        selectedUris = TagMediaUris()
+        streamingResult = null
         if (tagType == TagType.MUSIC) {
             movieSearchQuery = ""
             movieSearchResults = emptyList()
-            selectedMovie = null
-            streamingResult = null
-            isLoadingStreaming = false
         } else {
             searchQuery = ""
             searchResults = emptyList()
-            selectedUris = TagMediaUris()
         }
     }
 
@@ -120,6 +136,7 @@ fun WriteTagScreen(
         val movie = selectedMovie
         if (movie == null) {
             streamingResult = null
+            isLoadingStreaming = false
             return@LaunchedEffect
         }
         isLoadingStreaming = true
@@ -148,10 +165,6 @@ fun WriteTagScreen(
 
     // Movie search debouncing
     LaunchedEffect(movieSearchQuery) {
-        if (isSelectingMovie) {
-            isSelectingMovie = false
-            return@LaunchedEffect
-        }
         if (movieSearchQuery.length > 2) {
             isSearchingMovies = true
             delay(500)
@@ -173,7 +186,17 @@ fun WriteTagScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
+                    IconButton(onClick = {
+                        if (showConfirmScreen) {
+                            selectedAlbum = null
+                            selectedMovie = null
+                            selectedUris = TagMediaUris()
+                            url = ""
+                            streamingResult = null
+                        } else {
+                            onBackClick()
+                        }
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -183,87 +206,187 @@ fun WriteTagScreen(
         },
         containerColor = TangibleBackground
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .padding(16.dp)
-                .fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            if (isWriting) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("Hold tag near device...")
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = onCancelClick) { Text("Cancel") }
-                    }
+        if (isWriting) {
+            Box(
+                modifier = Modifier
+                    .padding(padding)
+                    .fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator()
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Hold tag near device...")
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(onClick = onCancelClick) { Text("Cancel") }
                 }
-            } else {
-                // Tag type selector
-                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                    SegmentedButton(
-                        selected = tagType == TagType.MUSIC,
-                        onClick = { tagType = TagType.MUSIC },
-                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                        icon = { Icon(Icons.Default.MusicNote, contentDescription = null) }
-                    ) {
-                        Text("Music")
+            }
+        } else if (showConfirmScreen) {
+            WriteTagConfirmContent(
+                tagType = tagType,
+                selectedAlbum = selectedAlbum,
+                selectedMovie = selectedMovie,
+                isLoadingFirstTrack = isLoadingFirstTrack,
+                isLoadingStreaming = isLoadingStreaming,
+                streamingResult = streamingResult,
+                region = region,
+                url = url,
+                writeAs = writeAs,
+                onWriteAsChange = { writeAs = it },
+                writeError = writeError,
+                onWriteClick = {
+                    val title = when (tagType) {
+                        TagType.MUSIC -> selectedAlbum?.albumName ?: ""
+                        TagType.MOVIE -> selectedMovie?.title ?: ""
                     }
-                    SegmentedButton(
-                        selected = tagType == TagType.MOVIE,
-                        onClick = { tagType = TagType.MOVIE },
-                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                        icon = { Icon(Icons.Default.Movie, contentDescription = null) }
-                    ) {
-                        Text("Movie")
+                    val subtitle = when (tagType) {
+                        TagType.MUSIC -> selectedAlbum?.artistName ?: ""
+                        TagType.MOVIE -> selectedMovie?.year ?: ""
                     }
-                }
+                    val imageUrl = when (tagType) {
+                        TagType.MUSIC -> selectedAlbum?.displayImage
+                        TagType.MOVIE -> selectedMovie?.largePosterUrl
+                    }
+                    onWriteClick(TagWriteInfo(title = title, subtitle = subtitle, type = tagType, imageUrl = imageUrl, url = url))
+                },
+                modifier = Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+            )
+        } else {
+            WriteTagSearchContent(
+                tagType = tagType,
+                onTagTypeChange = { tagType = it },
+                musicSearchQuery = searchQuery,
+                onMusicSearchQueryChange = { searchQuery = it },
+                isSearchingMusic = isSearching || isLoadingFirstTrack,
+                musicResults = searchResults,
+                onMusicResultSelected = { result ->
+                    selectedAlbum = result
+                    scope.launch {
+                        isLoadingFirstTrack = true
+                        selectedUris = onAlbumSelected(result)
+                        isLoadingFirstTrack = false
+                    }
+                },
+                movieSearchQuery = movieSearchQuery,
+                onMovieSearchQueryChange = { movieSearchQuery = it },
+                isSearchingMovies = isSearchingMovies,
+                movieResults = movieSearchResults,
+                onMovieResultSelected = { movie ->
+                    selectedMovie = movie
+                },
+                modifier = Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+            )
+        }
+    }
+}
 
-                when (tagType) {
-                    TagType.MUSIC -> MusicContent(
-                        searchQuery = searchQuery,
-                        onSearchQueryChange = { searchQuery = it },
-                        isSearching = isSearching,
-                        isLoadingFirstTrack = isLoadingFirstTrack,
-                        searchResults = searchResults,
-                        onResultSelected = { result ->
-                            scope.launch {
-                                isLoadingFirstTrack = true
-                                searchQuery = result.title
-                                searchResults = emptyList()
-                                selectedUris = onAlbumSelected(result)
-                                isLoadingFirstTrack = false
-                            }
-                        },
-                        url = url,
-                        onUrlChange = { url = it },
-                        writeError = writeError,
-                        writeAs = writeAs,
-                        onWriteAsChange = { writeAs = it },
-                        onWriteClick = { onWriteClick(url) }
-                    )
-                    TagType.MOVIE -> MovieContent(
-                        searchQuery = movieSearchQuery,
-                        onSearchQueryChange = { movieSearchQuery = it },
-                        isSearching = isSearchingMovies,
-                        searchResults = movieSearchResults,
-                        selectedMovie = selectedMovie,
-                        onResultSelected = { movie ->
-                            isSelectingMovie = true
-                            selectedMovie = movie
-                            movieSearchQuery = movie.title
-                            movieSearchResults = emptyList()
-                        },
-                        streamingResult = streamingResult,
-                        isLoadingStreaming = isLoadingStreaming,
-                        region = region,
-                        url = url,
-                        onUrlChange = { url = it },
-                        writeError = writeError,
-                        onWriteClick = { onWriteClick(url) }
-                    )
+@Composable
+private fun WriteTagSearchContent(
+    tagType: TagType,
+    onTagTypeChange: (TagType) -> Unit,
+    musicSearchQuery: String,
+    onMusicSearchQueryChange: (String) -> Unit,
+    isSearchingMusic: Boolean,
+    musicResults: List<DiscogsSearchResult>,
+    onMusicResultSelected: (DiscogsSearchResult) -> Unit,
+    movieSearchQuery: String,
+    onMovieSearchQueryChange: (String) -> Unit,
+    isSearchingMovies: Boolean,
+    movieResults: List<TmdbMovieResult>,
+    onMovieResultSelected: (TmdbMovieResult) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            SegmentedButton(
+                selected = tagType == TagType.MUSIC,
+                onClick = { onTagTypeChange(TagType.MUSIC) },
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                icon = { Icon(Icons.Default.MusicNote, contentDescription = null) }
+            ) {
+                Text("Music")
+            }
+            SegmentedButton(
+                selected = tagType == TagType.MOVIE,
+                onClick = { onTagTypeChange(TagType.MOVIE) },
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                icon = { Icon(Icons.Default.Movie, contentDescription = null) }
+            ) {
+                Text("Movie")
+            }
+        }
+
+        when (tagType) {
+            TagType.MUSIC -> {
+                OutlinedTextField(
+                    value = musicSearchQuery,
+                    onValueChange = onMusicSearchQueryChange,
+                    label = { Text("Search artist or album") },
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        if (isSearchingMusic) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        } else {
+                            Icon(Icons.Default.Search, contentDescription = null)
+                        }
+                    }
+                )
+                if (musicResults.isNotEmpty()) {
+                    SearchResultsCard {
+                        items(musicResults) { result ->
+                            ListItem(
+                                headlineContent = { Text(result.title) },
+                                leadingContent = {
+                                    AsyncImage(
+                                        model = result.thumb,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(40.dp)
+                                    )
+                                },
+                                modifier = Modifier.clickable { onMusicResultSelected(result) }
+                            )
+                        }
+                    }
+                }
+            }
+            TagType.MOVIE -> {
+                OutlinedTextField(
+                    value = movieSearchQuery,
+                    onValueChange = onMovieSearchQueryChange,
+                    label = { Text("Search movie") },
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        if (isSearchingMovies) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        } else {
+                            Icon(Icons.Default.Search, contentDescription = null)
+                        }
+                    }
+                )
+                if (movieResults.isNotEmpty()) {
+                    SearchResultsCard {
+                        items(movieResults) { movie ->
+                            ListItem(
+                                headlineContent = { Text(movie.title) },
+                                supportingContent = { if (movie.year.isNotBlank()) Text(movie.year) },
+                                leadingContent = {
+                                    AsyncImage(
+                                        model = movie.posterUrl,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(40.dp)
+                                    )
+                                },
+                                modifier = Modifier.clickable { onMovieResultSelected(movie) }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -272,65 +395,156 @@ fun WriteTagScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MusicContent(
-    searchQuery: String,
-    onSearchQueryChange: (String) -> Unit,
-    isSearching: Boolean,
+private fun WriteTagConfirmContent(
+    tagType: TagType,
+    selectedAlbum: DiscogsSearchResult?,
+    selectedMovie: TmdbMovieResult?,
     isLoadingFirstTrack: Boolean,
-    searchResults: List<DiscogsSearchResult>,
-    onResultSelected: (DiscogsSearchResult) -> Unit,
+    isLoadingStreaming: Boolean,
+    streamingResult: MovieStreamingResult?,
+    region: String,
     url: String,
-    onUrlChange: (String) -> Unit,
-    writeError: String?,
     writeAs: WriteAsOption,
     onWriteAsChange: (WriteAsOption) -> Unit,
-    onWriteClick: () -> Unit
+    writeError: String?,
+    onWriteClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    val isLoading = isLoadingFirstTrack || isLoadingStreaming
 
-    OutlinedTextField(
-        value = searchQuery,
-        onValueChange = onSearchQueryChange,
-        label = { Text("Search artist or album") },
-        modifier = Modifier.fillMaxWidth(),
-        trailingIcon = {
-            if (isSearching || isLoadingFirstTrack) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+    Column(
+        modifier = modifier.padding(16.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isLoading) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    CircularProgressIndicator()
+                    Text(
+                        if (tagType == TagType.MUSIC) "Looking up streaming links…" else "Fetching streaming availability in $region…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             } else {
-                Icon(Icons.Default.Search, contentDescription = null)
+                val imageUrl = when (tagType) {
+                    TagType.MUSIC -> selectedAlbum?.displayImage
+                    TagType.MOVIE -> selectedMovie?.largePosterUrl
+                }
+                val title = when (tagType) {
+                    TagType.MUSIC -> selectedAlbum?.albumName ?: ""
+                    TagType.MOVIE -> selectedMovie?.title ?: ""
+                }
+                val subtitle = when (tagType) {
+                    TagType.MUSIC -> selectedAlbum?.artistName ?: ""
+                    TagType.MOVIE -> selectedMovie?.year ?: ""
+                }
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    AsyncImage(
+                        model = imageUrl,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(220.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center
+                    )
+                    if (subtitle.isNotBlank()) {
+                        Text(
+                            subtitle,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    if (tagType == TagType.MOVIE) {
+                        when {
+                            streamingResult != null && streamingResult.options.isEmpty() ->
+                                Text(
+                                    "Not available for streaming in $region.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                            streamingResult != null ->
+                                StreamingServicesCard(streamingResult, region)
+                        }
+                    }
+                }
             }
         }
-    )
 
-    if (searchResults.isNotEmpty()) {
-        SearchResultsCard {
-            items(searchResults) { result ->
-                ListItem(
-                    headlineContent = { Text(result.title) },
-                    leadingContent = {
-                        AsyncImage(
-                            model = result.thumb,
-                            contentDescription = null,
-                            modifier = Modifier.size(40.dp)
-                        )
-                    },
-                    modifier = Modifier.clickable { onResultSelected(result) }
+        if (writeError != null) {
+            Text(
+                text = writeError,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (tagType == TagType.MUSIC) {
+                WriteAsDropdown(
+                    writeAs = writeAs,
+                    onWriteAsChange = onWriteAsChange,
+                    modifier = Modifier.weight(1f)
                 )
+            } else {
+                Spacer(modifier = Modifier.weight(1f))
+            }
+
+            UrlTooltipIcon(url = url)
+
+            Button(
+                onClick = onWriteClick,
+                enabled = url.isNotBlank() && !isLoading
+            ) {
+                Text("Write Tag")
             }
         }
     }
+}
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WriteAsDropdown(
+    writeAs: WriteAsOption,
+    onWriteAsChange: (WriteAsOption) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = !expanded },
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier
     ) {
         OutlinedTextField(
             value = when (writeAs) {
-                WriteAsOption.TANGIBLE -> "Tangible URI (Multi-player)"
-                WriteAsOption.SPOTIFY -> "Spotify URI (Direct)"
-                WriteAsOption.YOUTUBE_MUSIC -> "YouTube Music URI (Direct)"
-                WriteAsOption.APPLE_MUSIC -> "Apple Music URI (Direct)"
+                WriteAsOption.TANGIBLE -> "Tangible URI"
+                WriteAsOption.SPOTIFY -> "Spotify URI"
+                WriteAsOption.YOUTUBE_MUSIC -> "YouTube Music"
+                WriteAsOption.APPLE_MUSIC -> "Apple Music"
             },
             onValueChange = {},
             readOnly = true,
@@ -347,190 +561,46 @@ private fun MusicContent(
         ) {
             DropdownMenuItem(
                 text = { Text("Tangible URI (Multi-player support)") },
-                onClick = {
-                    onWriteAsChange(WriteAsOption.TANGIBLE)
-                    expanded = false
-                }
+                onClick = { onWriteAsChange(WriteAsOption.TANGIBLE); expanded = false }
             )
             DropdownMenuItem(
                 text = { Text("Spotify URI (Opens Spotify directly)") },
-                onClick = {
-                    onWriteAsChange(WriteAsOption.SPOTIFY)
-                    expanded = false
-                }
+                onClick = { onWriteAsChange(WriteAsOption.SPOTIFY); expanded = false }
             )
             DropdownMenuItem(
                 text = { Text("YouTube Music URI (Opens YTM directly)") },
-                onClick = {
-                    onWriteAsChange(WriteAsOption.YOUTUBE_MUSIC)
-                    expanded = false
-                }
+                onClick = { onWriteAsChange(WriteAsOption.YOUTUBE_MUSIC); expanded = false }
             )
             DropdownMenuItem(
                 text = { Text("Apple Music URI (Opens Apple Music directly)") },
-                onClick = {
-                    onWriteAsChange(WriteAsOption.APPLE_MUSIC)
-                    expanded = false
-                }
+                onClick = { onWriteAsChange(WriteAsOption.APPLE_MUSIC); expanded = false }
             )
         }
     }
-
-    OutlinedTextField(
-        value = url,
-        onValueChange = onUrlChange,
-        label = { Text("URL to Write") },
-        placeholder = { Text("https://...") },
-        modifier = Modifier.fillMaxWidth()
-    )
-
-    if (writeError != null) {
-        Text(text = writeError, color = MaterialTheme.colorScheme.error)
-    }
-
-    Button(
-        onClick = onWriteClick,
-        modifier = Modifier.fillMaxWidth(),
-        enabled = url.isNotBlank()
-    ) {
-        Text("Write to Tag")
-    }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MovieContent(
-    searchQuery: String,
-    onSearchQueryChange: (String) -> Unit,
-    isSearching: Boolean,
-    searchResults: List<TmdbMovieResult>,
-    selectedMovie: TmdbMovieResult?,
-    onResultSelected: (TmdbMovieResult) -> Unit,
-    streamingResult: MovieStreamingResult?,
-    isLoadingStreaming: Boolean,
-    region: String,
-    url: String,
-    onUrlChange: (String) -> Unit,
-    writeError: String?,
-    onWriteClick: () -> Unit
-) {
-    OutlinedTextField(
-        value = searchQuery,
-        onValueChange = onSearchQueryChange,
-        label = { Text("Search movie") },
-        modifier = Modifier.fillMaxWidth(),
-        trailingIcon = {
-            if (isSearching) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-            } else {
-                Icon(Icons.Default.Search, contentDescription = null)
+private fun UrlTooltipIcon(url: String) {
+    val tooltipState = rememberTooltipState()
+    val scope = rememberCoroutineScope()
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = {
+            PlainTooltip {
+                Text(url.ifBlank { "No URL yet" })
             }
-        }
-    )
-
-    if (searchResults.isNotEmpty()) {
-        SearchResultsCard {
-            items(searchResults) { movie ->
-                ListItem(
-                    headlineContent = { Text(movie.title) },
-                    supportingContent = { if (movie.year.isNotBlank()) Text(movie.year) },
-                    leadingContent = {
-                        AsyncImage(
-                            model = movie.posterUrl,
-                            contentDescription = null,
-                            modifier = Modifier.size(40.dp)
-                        )
-                    },
-                    modifier = Modifier.clickable { onResultSelected(movie) }
-                )
-            }
-        }
-    }
-
-    if (selectedMovie != null) {
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier.padding(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AsyncImage(
-                    model = selectedMovie.posterUrl,
-                    contentDescription = null,
-                    modifier = Modifier.size(56.dp)
-                )
-                Column {
-                    Text(selectedMovie.title, style = MaterialTheme.typography.titleMedium)
-                    if (selectedMovie.year.isNotBlank()) {
-                        Text(selectedMovie.year, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-        }
-
-        when {
-            isLoadingStreaming -> {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                    Text(
-                        "Fetching streaming availability in $region…",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            streamingResult != null && streamingResult.options.isEmpty() -> {
-                Text(
-                    "Not available for streaming in $region.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            streamingResult != null -> {
-                StreamingServicesCard(streamingResult, region)
-            }
-        }
-    }
-
-    OutlinedTextField(
-        value = url,
-        onValueChange = onUrlChange,
-        label = { Text("URL to Write") },
-        placeholder = { Text("tangible://movie?tmdb_id=…") },
-        modifier = Modifier.fillMaxWidth()
-    )
-
-    if (url.isNotBlank()) {
-        val byteCount = url.toByteArray(Charsets.UTF_8).size
-        val tagNote = when {
-            byteCount <= NFC_NTAG215_BYTES -> "Fits NTAG215 and larger"
-            else -> "Requires NTAG216 or larger"
-        }
-        val noteColor = if (byteCount <= NFC_NTAG215_BYTES)
-            MaterialTheme.colorScheme.primary
-        else
-            MaterialTheme.colorScheme.error
-        Text(
-            "$byteCount bytes · $tagNote",
-            style = MaterialTheme.typography.labelSmall,
-            color = noteColor
-        )
-    }
-
-    if (writeError != null) {
-        Text(text = writeError, color = MaterialTheme.colorScheme.error)
-    }
-
-    Button(
-        onClick = onWriteClick,
-        modifier = Modifier.fillMaxWidth(),
-        enabled = url.isNotBlank()
+        },
+        state = tooltipState
     ) {
-        Text("Write to Tag")
+        IconButton(onClick = { scope.launch { tooltipState.show() } }) {
+            Icon(
+                imageVector = Icons.Default.Visibility,
+                contentDescription = "View URL",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 }
 
@@ -559,7 +629,6 @@ private fun StreamingServicesCard(result: MovieStreamingResult, region: String) 
                             modifier = Modifier.size(16.dp)
                         )
                     } else {
-                        // Spacer to keep alignment when icon is absent
                         Spacer(modifier = Modifier.size(16.dp))
                     }
                     val typeLabel = option.allTypes.joinToString(", ") { type ->
@@ -596,6 +665,6 @@ private fun SearchResultsCard(content: androidx.compose.foundation.lazy.LazyList
 @Composable
 fun WriteTagScreenPreview() {
     MaterialTheme {
-        WriteTagScreen(onBackClick = {}, onWriteClick = { _ -> })
+        WriteTagScreen(onBackClick = {}, onWriteClick = {})
     }
 }

@@ -23,7 +23,11 @@ data class DiscogsSearchResult(
     @SerializedName("id") val id: Int,
     @SerializedName("title") val title: String,
     @SerializedName("thumb") val thumb: String,
-    @SerializedName("uri") val uri: String // This is a relative path like /release/123
+    @SerializedName("cover_image") val coverImage: String? = null,
+    @SerializedName("uri") val uri: String
 ) {
     val fullUrl: String get() = "https://www.discogs.com$uri"
+    val displayImage: String get() = if (!coverImage.isNullOrBlank()) coverImage else thumb
+    val artistName: String get() = if (title.contains(" - ")) title.substringBefore(" - ").trim() else ""
+    val albumName: String get() = if (title.contains(" - ")) title.substringAfter(" - ").trim() else title
 }

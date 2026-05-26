@@ -1,44 +1,29 @@
 package com.example.tangible.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-
-private data class MockTag(
-    val title: String,
-    val subtitle: String,
-    val type: TagType,
-    val artColor: Color
-)
-
-private val mockTags = listOf(
-    MockTag("The Dark Side of the Moon", "Pink Floyd", TagType.MUSIC, Color(0xFF1A1A6E)),
-    MockTag("Inception", "2010 · Nolan", TagType.MOVIE, Color(0xFF0D3B1E)),
-    MockTag("Abbey Road", "The Beatles", TagType.MUSIC, Color(0xFF4A0E2D)),
-    MockTag("Interstellar", "2014 · Nolan", TagType.MOVIE, Color(0xFF0A2744)),
-    MockTag("Kind of Blue", "Miles Davis", TagType.MUSIC, Color(0xFF004D40)),
-    MockTag("The Godfather", "1972 · Coppola", TagType.MOVIE, Color(0xFF3B1A0A)),
-    MockTag("Random Access Memories", "Daft Punk", TagType.MUSIC, Color(0xFF5C3200)),
-    MockTag("2001: A Space Odyssey", "1968 · Kubrick", TagType.MOVIE, Color(0xFF1A0A3B)),
-)
+import coil.compose.AsyncImage
+import com.example.tangible.SavedTag
 
 @Composable
-fun MainScreen() {
-    if (mockTags.isEmpty()) {
+fun MainScreen(
+    tags: List<SavedTag>,
+    onPlay: (String) -> Unit
+) {
+    if (tags.isEmpty()) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
@@ -55,15 +40,15 @@ fun MainScreen() {
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(vertical = 12.dp)
         ) {
-            items(mockTags) { tag ->
-                TagRow(tag)
+            items(tags, key = { it.id }) { tag ->
+                TagRow(tag = tag, onPlay = onPlay)
             }
         }
     }
 }
 
 @Composable
-private fun TagRow(tag: MockTag) {
+private fun TagRow(tag: SavedTag, onPlay: (String) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -74,15 +59,30 @@ private fun TagRow(tag: MockTag) {
         Box(
             modifier = Modifier
                 .size(72.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(tag.artColor),
+                .clip(RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = if (tag.type == TagType.MUSIC) "♪" else "▶",
-                style = MaterialTheme.typography.headlineMedium,
-                color = Color.White.copy(alpha = 0.35f)
-            )
+            if (tag.imageUrl != null) {
+                AsyncImage(
+                    model = tag.imageUrl,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = if (tag.type == "MUSIC") "♪" else "▶",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+            }
         }
 
         // Title + subtitle
@@ -109,16 +109,8 @@ private fun TagRow(tag: MockTag) {
             )
         }
 
-        // Action buttons
-        IconButton(onClick = {}, modifier = Modifier.size(44.dp)) {
-            Icon(
-                imageVector = Icons.Default.Edit,
-                contentDescription = "Edit tag",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp)
-            )
-        }
-        IconButton(onClick = {}, modifier = Modifier.size(44.dp)) {
+        // Play button
+        IconButton(onClick = { onPlay(tag.url) }, modifier = Modifier.size(44.dp)) {
             Icon(
                 imageVector = Icons.Default.PlayArrow,
                 contentDescription = "Play",
