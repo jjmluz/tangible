@@ -4,32 +4,41 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Outer NFC Tag Frame -->
+    <!-- Outer record circle -->
     <path
-        android:pathData="M22,30 A8,8 0 0 1 30,22 H78 A8,8 0 0 1 86,30 V78 A8,8 0 0 1 78,86 H30 A8,8 0 0 1 22,78 Z"
+        android:pathData="M54,10 A44,44 0 1,1 54,98 A44,44 0 1,1 54,10 Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3"
+        android:fillColor="#00000000" />
+
+    <!-- Right-side groove arcs (r=20, 27, 34), 120° span centered on 3 o'clock -->
+    <path
+        android:pathData="M64,36.68 A20,20 0 0,1 64,71.32"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.5"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M67.5,30.62 A27,27 0 0,1 67.5,77.38"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.5"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M71,24.56 A34,34 0 0,1 71,83.44"
         android:strokeColor="#FFFFFF"
         android:strokeWidth="2.5"
         android:fillColor="#00000000" />
 
-    <!-- Vinyl Record Outline -->
+    <!-- Center label circle -->
     <path
-        android:pathData="M54,32 A22,22 0 1,1 54,76 A22,22 0 1,1 54,32"
+        android:pathData="M54,40 A14,14 0 1,1 54,68 A14,14 0 1,1 54,40 Z"
         android:strokeColor="#FFFFFF"
         android:strokeWidth="2.5"
         android:fillColor="#00000000" />
 
-    <!-- Record Center Hole -->
+    <!-- Center hole -->
     <path
-        android:pathData="M54,52 A2,2 0 1,1 54,56 A2,2 0 1,1 54,52"
+        android:pathData="M54,51 A3,3 0 1,1 54,57 A3,3 0 1,1 54,51 Z"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="2.5"
-        android:fillColor="#00000000" />
-
-    <!-- Subtle Antenna / Groove Lines -->
-    <path
-        android:pathData="M14,26 A12,12 0 0 1 26,14 H82 A12,12 0 0 1 94,26 V82 A12,12 0 0 1 82,94 H26 A12,12 0 0 1 14,82 Z"
-        android:strokeColor="#FFFFFF"
-        android:strokeAlpha="0.3"
-        android:strokeWidth="1.5"
-        android:fillColor="#00000000" />
+        android:strokeWidth="2"
+        android:fillColor="#FFFFFF" />
 </vector>
