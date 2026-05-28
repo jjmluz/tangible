@@ -1,7 +1,10 @@
 package com.example.tangible.data
 
 import android.net.Uri
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -244,6 +247,27 @@ class StreamingAvailabilityRepository(private val rapidApiKey: String) {
         }
 
         fun getProviderId(shortKey: String): String? = PROVIDER_ID_BY_SHORT_KEY[shortKey]
+
+        private val scrapeClient = OkHttpClient()
+
+        // Fetches the Prime Video web page for the given ASIN and extracts the GTI,
+        // returning an app deep-link that actually works in the Prime Video app.
+        suspend fun resolveGtiUrl(asin: String): String? = withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder()
+                    .url("https://www.primevideo.com/detail/$asin")
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile)")
+                    .build()
+                val body = scrapeClient.newCall(request).execute().use { it.body?.string() ?: "" }
+                android.util.Log.d("Tangible", "resolveGtiUrl: fetched ${body.length} chars for asin=$asin")
+                val gti = Regex("amzn1\\.dv\\.gti\\.[a-f0-9\\-]+").find(body)?.value
+                android.util.Log.d("Tangible", "resolveGtiUrl: gti=$gti")
+                gti?.let { "https://app.primevideo.com/detail?gti=$it" }
+            } catch (e: Exception) {
+                android.util.Log.e("Tangible", "resolveGtiUrl: failed for asin=$asin", e)
+                null
+            }
+        }
 
         // Parses "typeCode:contentId" (or bare "contentId" for legacy tags without a type prefix).
         fun resolveService(shortKey: String, encodedValue: String): ResolvedService? {

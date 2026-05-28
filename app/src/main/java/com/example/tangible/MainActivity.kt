@@ -581,6 +581,24 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun playMovie(url: String) {
+        val parsed = Uri.parse(url)
+        val asin = if (parsed.host == "app.primevideo.com") {
+            parsed.getQueryParameter("asin")
+                ?: parsed.lastPathSegment?.takeIf { it.matches(Regex("[A-Z0-9]{10,}")) }
+        } else null
+        Log.d("Tangible", "playMovie: url=$url asin=$asin")
+        if (asin != null) {
+            lifecycleScope.launch {
+                val resolved = StreamingAvailabilityRepository.resolveGtiUrl(asin) ?: url
+                Log.d("Tangible", "playMovie: resolved=$resolved")
+                doPlayMovie(resolved)
+            }
+            return
+        }
+        doPlayMovie(url)
+    }
+
+    private fun doPlayMovie(url: String) {
         val uri = Uri.parse(url)
         val targetPackage = if (uri.scheme == "stremio") {
             "com.stremio.one"
