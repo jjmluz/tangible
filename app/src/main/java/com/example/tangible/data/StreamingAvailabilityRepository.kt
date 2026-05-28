@@ -51,29 +51,14 @@ private val SERVICE_CONFIGS: Map<String, ServiceConfig> = mapOf(
         buildLink = { id -> "https://www.disneyplus.com/browse/entity-$id" }
     ),
     "hbo" to ServiceConfig(
-        shortKey = "mx", displayName = "Max",
+        shortKey = "mx", displayName = "HBO Max",
         extractId = { url -> Regex("/(?:movie|show|video)/([a-f0-9\\-]{36})").find(url)?.groupValues?.get(1) },
         buildLink = { id -> "https://play.max.com/movie/$id" }
-    ),
-    "hulu" to ServiceConfig(
-        shortKey = "hu", displayName = "Hulu",
-        extractId = { url -> Regex("/movie/([a-z0-9\\-]{10,})").find(url)?.groupValues?.get(1) },
-        buildLink = { id -> "https://www.hulu.com/movie/$id" }
     ),
     "apple" to ServiceConfig(
         shortKey = "at", displayName = "Apple TV+",
         extractId = { url -> Regex("(umc\\.cmc\\.[a-z0-9]+)").find(url)?.groupValues?.get(1) },
         buildLink = { id -> "https://tv.apple.com/movie/$id" }
-    ),
-    "paramount" to ServiceConfig(
-        shortKey = "pp", displayName = "Paramount+",
-        extractId = { url -> Regex("/movies/video/([a-zA-Z0-9_]+)").find(url)?.groupValues?.get(1) },
-        buildLink = { id -> "https://www.paramountplus.com/movies/video/$id" }
-    ),
-    "peacock" to ServiceConfig(
-        shortKey = "pk", displayName = "Peacock",
-        extractId = { url -> Regex("/asset/([a-f0-9\\-]{36})").find(url)?.groupValues?.get(1) },
-        buildLink = { id -> "https://www.peacocktv.com/watch/asset/$id" }
     ),
     "stremio" to ServiceConfig(
         shortKey = "sm", displayName = "Stremio",
@@ -84,7 +69,7 @@ private val SERVICE_CONFIGS: Map<String, ServiceConfig> = mapOf(
 
 // Insertion order matches priority: Netflix first, then major services; Stremio last as universal fallback
 private val SERVICE_PRIORITY: List<String> =
-    listOf("netflix", "prime", "disney", "hbo", "hulu", "apple", "paramount", "peacock", "stremio")
+    listOf("netflix", "prime", "disney", "hbo", "apple", "stremio")
 
 // Short-key → config for read-time URL resolution
 private val SERVICE_CONFIG_BY_KEY: Map<String, ServiceConfig> =
@@ -130,7 +115,10 @@ class StreamingAvailabilityRepository(private val rapidApiKey: String) {
             val countries = api.getCountries()
             val country = countries[region.lowercase()] ?: return listOf(stremio)
             val regional = country.services
-                .filter { service -> service.supportedStreamingTypes.any { (type, enabled) -> enabled && type != "addon" } }
+                .filter { service ->
+                    SERVICE_CONFIGS.containsKey(service.id) &&
+                    service.supportedStreamingTypes.any { (type, enabled) -> enabled && type != "addon" }
+                }
                 .map { service ->
                     MovieProvider(
                         id = service.id,
@@ -153,7 +141,7 @@ class StreamingAvailabilityRepository(private val rapidApiKey: String) {
                 val response = api.getShow("movie/$tmdbId", region.lowercase())
                 imdbId = response.imdbId
                 (response.streamingOptions[region.lowercase()] ?: emptyList())
-                    .filter { it.type != "addon" }
+                    .filter { it.type != "addon" && SERVICE_CONFIGS.containsKey(it.service.id) }
                     .groupBy { it.service.id }
                     .map { (_, dtos) ->
                         val bestDto = dtos.minBy { typeOrder.indexOf(it.type).let { i -> if (i < 0) Int.MAX_VALUE else i } }
