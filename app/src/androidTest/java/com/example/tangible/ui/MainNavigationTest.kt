@@ -13,7 +13,7 @@ class MainNavigationTest {
 
     @Test
     fun testNavigationToSettingsAndBack() {
-        // Start at Home (default)
+        // Start at Collection (default)
         composeTestRule.onNodeWithText("Tangible").assertIsDisplayed()
 
         // Navigate to Settings
@@ -23,10 +23,10 @@ class MainNavigationTest {
         composeTestRule.onNodeWithText("Settings").assertIsDisplayed()
         composeTestRule.onNodeWithText("Music Service").assertIsDisplayed()
 
-        // Navigate back to Home
-        composeTestRule.onNodeWithContentDescription("Home").performClick()
+        // Navigate back to Collection
+        composeTestRule.onNodeWithContentDescription("Collection").performClick()
         
-        // Verify back on Home
+        // Verify back on Collection
         composeTestRule.onNodeWithText("Tangible").assertIsDisplayed()
     }
 

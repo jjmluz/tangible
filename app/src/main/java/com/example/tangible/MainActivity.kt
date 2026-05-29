@@ -21,8 +21,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -852,14 +852,14 @@ fun TangibleApp(
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
-    val showChrome = currentRoute == "home" || currentRoute == "settings"
+    val showChrome = currentRoute == "collection" || currentRoute == "settings"
 
     Scaffold(
         topBar = {
             if (showChrome) {
                 TopAppBar(
                     title = {
-                        if (currentRoute == "home") {
+                        if (currentRoute == "collection") {
                             Row(verticalAlignment = Alignment.Bottom) {
                                 Text(
                                     text = "Tangible",
@@ -894,16 +894,16 @@ fun TangibleApp(
             if (showChrome) {
                 TangibleBottomBar(
                     currentRoute = currentRoute,
-                    onHomeClick = {
-                        navController.navigate("home") {
-                            popUpTo("home") { inclusive = false }
+                    onCollectionClick = {
+                        navController.navigate("collection") {
+                            popUpTo("collection") { inclusive = false }
                             launchSingleTop = true
                         }
                     },
                     onWriteClick = { navController.navigate("write_tag") },
                     onSettingsClick = {
                         navController.navigate("settings") {
-                            popUpTo("home") { saveState = true }
+                            popUpTo("collection") { saveState = true }
                             launchSingleTop = true
                             restoreState = true
                         }
@@ -915,10 +915,10 @@ fun TangibleApp(
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = "home",
+            startDestination = "collection",
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable("home") {
+            composable("collection") {
                 MainScreen(tags = savedTags, onPlay = onPlay)
             }
             composable("write_tag") {
@@ -1008,7 +1008,7 @@ fun TangibleApp(
 @Composable
 private fun TangibleBottomBar(
     currentRoute: String?,
-    onHomeClick: () -> Unit,
+    onCollectionClick: () -> Unit,
     onWriteClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
@@ -1032,10 +1032,10 @@ private fun TangibleBottomBar(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 BottomNavItem(
-                    icon = Icons.Default.Home,
-                    label = "Home",
-                    selected = currentRoute == "home",
-                    onClick = onHomeClick,
+                    icon = Icons.Default.VideoLibrary,
+                    label = "Collection",
+                    selected = currentRoute == "collection",
+                    onClick = onCollectionClick,
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(modifier = Modifier.weight(1f))
