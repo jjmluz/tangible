@@ -101,7 +101,8 @@ private val STREAMING_PACKAGES = mapOf(
     "primevideo.com" to "com.amazon.avod.thirdpartyclient",
     "disneyplus.com" to "com.disney.disneyplus",
     "play.max.com" to "com.wbd.stream",
-    "tv.apple.com" to "com.apple.atve.androidtv.appletv"
+    "tv.apple.com" to "com.apple.atve.androidtv.appletv",
+    "skyshowtime.com" to "com.skyshowtime.skyshowtime.google"
 )
 
 class MainActivity : ComponentActivity() {

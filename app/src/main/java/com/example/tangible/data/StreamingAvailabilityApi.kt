@@ -58,6 +58,7 @@ data class StreamingOption(
     val serviceName: String,
     val type: String,
     val link: String,
+    val videoLink: String? = null,
     val allTypes: List<String> = emptyList()
 )
 

@@ -60,6 +60,17 @@ private val SERVICE_CONFIGS: Map<String, ServiceConfig> = mapOf(
         extractId = { url -> Regex("(umc\\.cmc\\.[a-z0-9]+)").find(url)?.groupValues?.get(1) },
         buildLink = { id -> "https://tv.apple.com/movie/$id" }
     ),
+    "skyshowtime" to ServiceConfig(
+        shortKey = "ss", displayName = "SkyShowtime",
+        extractId = { url -> 
+            // Handles both link (slug-based) and videoLink (UUID-based):
+            // Slug: .../watch/asset/movie/title/id
+            // UUID: .../watch/asset/movies/slug/70ef5adf-d120-3a6a-af13-4c4d339e3882
+            Regex("([a-f0-9\\-]{36})").find(url)?.value 
+                ?: Regex("/asset/(?:movie/)?(?:[^/]+/)?([^/?#]+)").find(url)?.groupValues?.get(1)
+        },
+        buildLink = { id -> "https://www.skyshowtime.com/watch/asset/movie/title/$id" }
+    ),
     "stremio" to ServiceConfig(
         shortKey = "sm", displayName = "Stremio",
         extractId = { _ -> null }, // not populated from API; IMDb ID is injected directly
@@ -67,9 +78,10 @@ private val SERVICE_CONFIGS: Map<String, ServiceConfig> = mapOf(
     )
 )
 
-// Insertion order matches priority: Netflix first, then major services; Stremio last as universal fallback
+// Insertion order matches priority: Netflix/Prime/SkyShowtime first (short/vital), then others.
+// This helps fit the most important services on smaller NTAG213 tags (~136 bytes).
 private val SERVICE_PRIORITY: List<String> =
-    listOf("netflix", "prime", "disney", "hbo", "apple", "stremio")
+    listOf("netflix", "prime", "skyshowtime", "disney", "hbo", "apple", "stremio")
 
 // Short-key → config for read-time URL resolution
 private val SERVICE_CONFIG_BY_KEY: Map<String, ServiceConfig> =
@@ -153,6 +165,7 @@ class StreamingAvailabilityRepository(private val rapidApiKey: String) {
                             serviceName = bestDto.service.name,
                             type = bestDto.type,
                             link = bestDto.link,
+                            videoLink = bestDto.videoLink,
                             allTypes = allTypes
                         )
                     }
@@ -196,7 +209,12 @@ class StreamingAvailabilityRepository(private val rapidApiKey: String) {
             if (option.serviceId in encoded) continue // one entry per service (best type wins)
             if (option.serviceId == "stremio") continue // added separately below
             val config = SERVICE_CONFIGS[option.serviceId] ?: continue
-            val contentId = config.extractId(option.link) ?: continue
+            val linkToExtractFrom = if (option.serviceId == "skyshowtime") {
+                option.videoLink ?: option.link
+            } else {
+                option.link
+            }
+            val contentId = config.extractId(linkToExtractFrom) ?: continue
             val typeCode = when (option.type) {
                 "subscription" -> "s"
                 "free"         -> "f"
