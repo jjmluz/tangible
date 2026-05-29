@@ -11,6 +11,10 @@
 
     <queries>
         <package android:name="com.spotify.music" />
+        <package android:name="com.google.android.apps.youtube.music" />
+        <package android:name="com.apple.android.music" />
+        <package android:name="com.sonos.acr2" />
+        <package android:name="com.sonos.acr" />
     </queries>
 
     <application

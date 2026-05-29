@@ -627,6 +627,7 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "Please select a Sonos speaker in Settings", Toast.LENGTH_LONG).show()
             return
         }
+        openSonosApp()
         lifecycleScope.launch {
             val finalUri = when (selectedService) {
                 MusicService.SPOTIFY -> {
@@ -670,6 +671,31 @@ class MainActivity : ComponentActivity() {
                 if (selectedService == MusicService.APPLE_MUSIC) sonosRepository.playAppleMusicUri(ip, finalUri)
                 else sonosRepository.playSpotifyUri(ip, finalUri)
             }
+        }
+    }
+
+    private fun openSonosApp() {
+        val packageName = "com.sonos.acr2"
+        Log.d("Tangible", "Attempting to open Sonos app: $packageName")
+        try {
+            val intent = packageManager.getLaunchIntentForPackage(packageName)
+            if (intent != null) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(intent)
+                Log.d("Tangible", "Sonos app launch intent sent")
+            } else {
+                Log.w("Tangible", "Sonos app launch intent is null (app not found or visibility restricted)")
+                // Try the other package name just in case
+                val altPackage = "com.sonos.acr"
+                val altIntent = packageManager.getLaunchIntentForPackage(altPackage)
+                if (altIntent != null) {
+                    altIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(altIntent)
+                    Log.d("Tangible", "Sonos S2 app launch intent sent")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("Tangible", "Could not open Sonos app", e)
         }
     }
 
