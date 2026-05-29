@@ -688,24 +688,32 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun playOnSpotify(query: String) {
+        val intent = if (query.startsWith("spotify:")) {
+            Intent(Intent.ACTION_VIEW, Uri.parse(query)).apply {
+                putExtra("android.intent.extra.play_state", true)
+            }
+        } else {
+            Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).apply {
+                putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/album")
+                putExtra(SearchManager.QUERY, query)
+                putExtra("android.intent.extra.play_state", true)
+            }
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        intent.setPackage("com.spotify.music")
+
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            // Fallback if Spotify is not installed or package name is different
+            intent.setPackage(null)
+            try { startActivity(intent) } catch (e2: Exception) { }
+        }
+
         val remote = spotifyAppRemote
         if (remote != null && remote.isConnected) {
             remote.playerApi.play(query)
         } else {
-            val intent = if (query.startsWith("spotify:")) {
-                Intent(Intent.ACTION_VIEW, Uri.parse(query)).apply {
-                    putExtra("android.intent.extra.play_state", true)
-                }
-            } else {
-                Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).apply {
-                    putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/album")
-                    putExtra(SearchManager.QUERY, query)
-                    putExtra("android.intent.extra.play_state", true)
-                    `package` = "com.spotify.music"
-                }
-            }
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            try { startActivity(intent) } catch (e: Exception) { }
             connectToSpotify {
                 lifecycleScope.launch {
                     delay(1000)
