@@ -661,13 +661,14 @@ private fun WriteAsDropdown(
 
 @Composable
 private fun StreamingServicesCard(result: MovieStreamingResult, region: String) {
+    val countryName = REGIONS.find { it.first == region }?.second ?: region
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
-                "Available in $region",
+                "Availability in $countryName",
                 style = MaterialTheme.typography.labelLarge
             )
             result.options.forEach { option ->
@@ -690,8 +691,13 @@ private fun StreamingServicesCard(result: MovieStreamingResult, region: String) 
                         type.replaceFirstChar { it.uppercase() }
                     }
                     val statusText = if (!encoded) " (tag full — use NTAG216+)" else ""
+                    val displayText = if (option.serviceId == "stremio") {
+                        option.serviceName + statusText
+                    } else {
+                        "${option.serviceName} ($typeLabel)$statusText"
+                    }
                     Text(
-                        text = "${option.serviceName} ($typeLabel)$statusText",
+                        text = displayText,
                         style = MaterialTheme.typography.bodyMedium,
                         color = if (encoded)
                             MaterialTheme.colorScheme.onSurface
