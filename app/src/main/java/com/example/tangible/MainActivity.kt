@@ -20,6 +20,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
@@ -72,6 +73,7 @@ import com.example.tangible.ui.MusicSpeaker
 import com.example.tangible.ui.MusicSpeakerScreen
 import com.example.tangible.ui.SettingsScreen
 import com.example.tangible.ui.TagWriteInfo
+import com.example.tangible.ui.WelcomeWizardScreen
 import com.example.tangible.ui.WriteTagScreen
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -137,6 +139,7 @@ class MainActivity : ComponentActivity() {
     private var selectedMoviePlayer by mutableStateOf(MoviePlayer.THIS_DEVICE)
     private var region by mutableStateOf("US")
     private var movieProviders by mutableStateOf<List<MovieProvider>>(emptyList())
+    private var hasShownWelcomeWizard by mutableStateOf(false)
 
     // Sorting
     private var musicSortField by mutableStateOf(SortField.TITLE)
@@ -220,6 +223,7 @@ class MainActivity : ComponentActivity() {
         val moviePlayerValue = prefs.getString("selected_movie_player", MoviePlayer.THIS_DEVICE.name)
         selectedMoviePlayer = MoviePlayer.entries.find { it.name == moviePlayerValue } ?: MoviePlayer.THIS_DEVICE
         region = prefs.getString("region", "US") ?: "US"
+        hasShownWelcomeWizard = prefs.getBoolean("has_shown_welcome_wizard", false)
 
         // Load sort settings
         musicSortField = SortField.valueOf(prefs.getString("music_sort_field", SortField.TITLE.name) ?: SortField.TITLE.name)
@@ -354,6 +358,11 @@ class MainActivity : ComponentActivity() {
                         },
                         onGetServicesForRegion = { reg -> streamingRepository.getServicesForRegion(reg) },
                         onDeleteTags = { deleteTags(it) },
+                        hasShownWelcomeWizard = hasShownWelcomeWizard,
+                        onWelcomeWizardShown = {
+                            hasShownWelcomeWizard = true
+                            prefs.edit().putBoolean("has_shown_welcome_wizard", true).apply()
+                        },
                         musicSortField = musicSortField,
                         musicSortOrder = musicSortOrder,
                         movieSortField = movieSortField,
@@ -1066,6 +1075,8 @@ fun TangibleApp(
     onMovieProvidersChanged: (List<MovieProvider>) -> Unit,
     onGetServicesForRegion: suspend (String) -> List<MovieProvider>,
     onDeleteTags: (Set<String>) -> Unit,
+    hasShownWelcomeWizard: Boolean,
+    onWelcomeWizardShown: () -> Unit,
     musicSortField: SortField,
     musicSortOrder: SortOrder,
     movieSortField: SortField,
@@ -1079,6 +1090,14 @@ fun TangibleApp(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val showChrome = currentRoute == "collection" || currentRoute == "settings"
+
+    LaunchedEffect(Unit) {
+        if (!hasShownWelcomeWizard) {
+            navController.navigate("welcome_wizard") {
+                popUpTo("collection") { inclusive = false }
+            }
+        }
+    }
 
     var selectedTagIds by remember { mutableStateOf(setOf<String>()) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
@@ -1135,6 +1154,14 @@ fun TangibleApp(
                                     imageVector = Icons.Default.Delete,
                                     contentDescription = "Delete",
                                     tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        } else if (currentRoute == "settings") {
+                            IconButton(onClick = { navController.navigate("welcome_wizard") }) {
+                                Icon(
+                                    imageVector = Icons.Default.HelpOutline,
+                                    contentDescription = "Help",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -1198,6 +1225,14 @@ fun TangibleApp(
             startDestination = "collection",
             modifier = Modifier.padding(innerPadding)
         ) {
+            composable("welcome_wizard") {
+                WelcomeWizardScreen(
+                    onDismiss = {
+                        onWelcomeWizardShown()
+                        navController.popBackStack()
+                    }
+                )
+            }
             composable("collection") {
                 MainScreen(
                     tags = savedTags,
