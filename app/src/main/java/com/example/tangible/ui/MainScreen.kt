@@ -8,9 +8,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,32 +32,68 @@ fun MainScreen(
     onTagClick: (String) -> Unit,
     onTagLongClick: (String) -> Unit
 ) {
-    if (tags.isEmpty()) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "No tags yet.\nTap + to write your first tag.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
+    var selectedType by remember { mutableStateOf("MUSIC") }
+    val filteredTags = remember(tags, selectedType) {
+        tags.filter { it.type == selectedType }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (tags.isNotEmpty()) {
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                SegmentedButton(
+                    selected = selectedType == "MUSIC",
+                    onClick = { selectedType = "MUSIC" },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                    icon = { Icon(Icons.Default.MusicNote, contentDescription = null) }
+                ) {
+                    Text("Music")
+                }
+                SegmentedButton(
+                    selected = selectedType == "MOVIE",
+                    onClick = { selectedType = "MOVIE" },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                    icon = { Icon(Icons.Default.Movie, contentDescription = null) }
+                ) {
+                    Text("Movies")
+                }
+            }
         }
-    } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(vertical = 12.dp)
-        ) {
-            items(tags, key = { it.id }) { tag ->
-                TagRow(
-                    tag = tag,
-                    isSelected = tag.id in selectedTagIds,
-                    isSelectionMode = selectedTagIds.isNotEmpty(),
-                    onPlay = onPlay,
-                    onTagClick = { onTagClick(tag.id) },
-                    onTagLongClick = { onTagLongClick(tag.id) }
+
+        if (filteredTags.isEmpty()) {
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (tags.isEmpty()) {
+                        "No tags yet.\nTap + to write your first tag."
+                    } else {
+                        "No ${selectedType.lowercase()} tags found."
+                    },
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
                 )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentPadding = PaddingValues(bottom = 12.dp)
+            ) {
+                items(filteredTags, key = { it.id }) { tag ->
+                    TagRow(
+                        tag = tag,
+                        isSelected = tag.id in selectedTagIds,
+                        isSelectionMode = selectedTagIds.isNotEmpty(),
+                        onPlay = onPlay,
+                        onTagClick = { onTagClick(tag.id) },
+                        onTagLongClick = { onTagLongClick(tag.id) }
+                    )
+                }
             }
         }
     }
@@ -85,28 +123,40 @@ private fun TagRow(
         // Cover art
         Box(
             modifier = Modifier
-                .size(72.dp)
-                .clip(RoundedCornerShape(10.dp)),
+                .width(72.dp)
+                .height(72.dp),
             contentAlignment = Alignment.Center
         ) {
-            if (tag.imageUrl != null) {
-                AsyncImage(
-                    model = tag.imageUrl,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+            val imageModifier = if (tag.type == "MOVIE") {
+                Modifier
+                    .width(48.dp)
+                    .height(72.dp)
             } else {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = if (tag.type == "MUSIC") "♪" else "▶",
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        )
+                Modifier.size(72.dp)
+            }
+            Box(
+                modifier = imageModifier.clip(RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (tag.imageUrl != null) {
+                    AsyncImage(
+                        model = tag.imageUrl,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = if (tag.type == "MUSIC") "♪" else "▶",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            )
+                        }
                     }
                 }
             }

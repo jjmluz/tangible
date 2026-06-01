@@ -2,6 +2,8 @@ package com.example.tangible.ui
 
 import android.net.Uri
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -381,7 +383,11 @@ private fun WriteTagSearchContent(
                                     AsyncImage(
                                         model = movie.posterUrl,
                                         contentDescription = null,
-                                        modifier = Modifier.size(40.dp)
+                                        modifier = Modifier
+                                            .width(40.dp)
+                                            .height(60.dp)
+                                            .clip(RoundedCornerShape(4.dp)),
+                                        contentScale = ContentScale.Crop
                                     )
                                 },
                                 modifier = Modifier.clickable { onMovieResultSelected(movie) }
@@ -479,6 +485,7 @@ private fun WriteTagConfirmContent(
         ) {
             if (isLoading) {
                 Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -504,15 +511,21 @@ private fun WriteTagConfirmContent(
                 }
 
                 Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    val imageModifier = if (tagType == TagType.MOVIE) {
+                        Modifier
+                            .width(240.dp)
+                            .height(360.dp)
+                    } else {
+                        Modifier.size(280.dp)
+                    }
                     AsyncImage(
                         model = imageUrl,
                         contentDescription = null,
-                        modifier = Modifier
-                            .size(280.dp)
-                            .clip(RoundedCornerShape(12.dp)),
+                        modifier = imageModifier.clip(RoundedCornerShape(12.dp)),
                         contentScale = ContentScale.Crop
                     )
                     Text(
