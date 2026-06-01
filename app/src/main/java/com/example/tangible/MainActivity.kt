@@ -649,23 +649,22 @@ class MainActivity : ComponentActivity() {
                 if (sonosSpeakers.isEmpty()) {
                     Toast.makeText(this@MainActivity, "No Sonos speakers found", Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(this@MainActivity, "Grouping ${sonosSpeakers.size} speakers and playing...", Toast.LENGTH_SHORT).show()
-                    val master = sonosSpeakers[0]
-                    val masterUuid = sonosRepository.getSpeakerUuid(master.ip)
+                    Toast.makeText(this@MainActivity, "Playing on all speakers...", Toast.LENGTH_SHORT).show()
+                    // Query the full topology to get one IP per group (its coordinator).
+                    // Joining coordinators only is enough — each group's satellites auto-follow.
+                    val coordinators = sonosRepository.getAllCoordinatorIps(sonosSpeakers[0].ip)
+                        .ifEmpty { sonosSpeakers.map { it.ip } }
+                    val masterIp = coordinators[0]
+                    val masterUuid = sonosRepository.getSpeakerUuid(masterIp)
+                    // Play on master first while it is in a stable state, then join the other
+                    // group coordinators to it. Adding to an already-playing group is reliable.
+                    if (selectedService == MusicService.APPLE_MUSIC) sonosRepository.playAppleMusicUri(masterIp, finalUri)
+                    else sonosRepository.playSpotifyUri(masterIp, finalUri)
                     if (masterUuid != null) {
-                        sonosRepository.becomeMaster(master.ip)
-                        delay(500)
-                        sonosSpeakers.drop(1).forEach { slave ->
-                            launch {
-                                sonosRepository.stop(slave.ip)
-                                delay(200)
-                                sonosRepository.joinGroup(slave.ip, masterUuid)
-                            }
+                        coordinators.drop(1).forEach { coordinatorIp ->
+                            launch { sonosRepository.joinGroup(coordinatorIp, masterUuid) }
                         }
-                        delay(3000)
                     }
-                    if (selectedService == MusicService.APPLE_MUSIC) sonosRepository.playAppleMusicUri(master.ip, finalUri)
-                    else sonosRepository.playSpotifyUri(master.ip, finalUri)
                 }
             } else {
                 if (selectedService == MusicService.APPLE_MUSIC) sonosRepository.playAppleMusicUri(ip, finalUri)

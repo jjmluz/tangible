@@ -37,7 +37,7 @@ class SonosRepository {
     }
 
     suspend fun playSpotifyUri(speakerIp: String, spotifyUri: String): Boolean = withContext(Dispatchers.IO) {
-        val coordinatorIp = getCoordinatorIp(speakerIp) ?: speakerIp
+        val coordinatorIp = findCoordinatorIp(speakerIp) ?: speakerIp
         val speakerUuid = getSpeakerUuid(coordinatorIp) ?: return@withContext false
 
         val account = getSpotifyAccount(coordinatorIp)
@@ -73,7 +73,7 @@ class SonosRepository {
     }
 
     suspend fun playAppleMusicUri(speakerIp: String, appleMusicUrl: String): Boolean = withContext(Dispatchers.IO) {
-        val coordinatorIp = getCoordinatorIp(speakerIp) ?: speakerIp
+        val coordinatorIp = findCoordinatorIp(speakerIp) ?: speakerIp
         val speakerUuid = getSpeakerUuid(coordinatorIp) ?: return@withContext false
 
         // Extract ID from URL like https://music.apple.com/us/album/kind-of-blue/158322638
@@ -187,7 +187,7 @@ class SonosRepository {
     // Find the coordinator IP for a speaker's group.
     // Sonos topology XML has attributes in order: group, coordinator, uuid, location.
     // We use a line-based search to avoid relying on attribute ordering in a regex.
-    private fun getCoordinatorIp(speakerIp: String): String? {
+    private fun findCoordinatorIp(speakerIp: String): String? {
         return try {
             val url = "http://$speakerIp:1400/status/topology"
             val xml = java.net.URL(url).openConnection().apply { connectTimeout = 2000 }.getInputStream().bufferedReader().use { it.readText() }
@@ -205,6 +205,35 @@ class SonosRepository {
         } catch (e: Exception) {
             Log.e(TAG, "Error getting coordinator: ${e.message}")
             null
+        }
+    }
+
+    suspend fun getCoordinatorIp(speakerIp: String): String? = withContext(Dispatchers.IO) {
+        findCoordinatorIp(speakerIp)
+    }
+
+    suspend fun isReachable(ip: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            java.net.Socket().use { it.connect(java.net.InetSocketAddress(ip, 1400), 1000) }
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    // Returns one IP per Sonos group (the coordinator of each group).
+    // Joining only coordinators — not individual speakers — means each group's
+    // satellite members follow their coordinator automatically.
+    suspend fun getAllCoordinatorIps(speakerIp: String): List<String> = withContext(Dispatchers.IO) {
+        try {
+            val url = "http://$speakerIp:1400/status/topology"
+            val xml = java.net.URL(url).openConnection().apply { connectTimeout = 2000 }.getInputStream().bufferedReader().use { it.readText() }
+            xml.lines()
+                .filter { it.contains("""coordinator="true"""") }
+                .mapNotNull { Regex("""location="http://([^:]+):1400/"""").find(it)?.groupValues?.get(1) }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching topology: ${e.message}")
+            emptyList()
         }
     }
 
