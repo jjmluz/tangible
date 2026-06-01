@@ -21,5 +21,10 @@ class TagRepository(private val prefs: SharedPreferences) {
         prefs.edit().putString(key, gson.toJson(tags)).apply()
     }
 
+    fun delete(tagIds: Set<String>) {
+        val tags = loadAll().filter { it.id !in tagIds }
+        prefs.edit().putString(key, gson.toJson(tags)).apply()
+    }
+
     fun exportJson(): String = gson.toJson(loadAll())
 }

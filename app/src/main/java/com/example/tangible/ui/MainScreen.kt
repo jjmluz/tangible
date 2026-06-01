@@ -1,5 +1,8 @@
 package com.example.tangible.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -21,7 +25,10 @@ import com.example.tangible.SavedTag
 @Composable
 fun MainScreen(
     tags: List<SavedTag>,
-    onPlay: (String) -> Unit
+    selectedTagIds: Set<String>,
+    onPlay: (String) -> Unit,
+    onTagClick: (String) -> Unit,
+    onTagLongClick: (String) -> Unit
 ) {
     if (tags.isEmpty()) {
         Box(
@@ -41,17 +48,37 @@ fun MainScreen(
             contentPadding = PaddingValues(vertical = 12.dp)
         ) {
             items(tags, key = { it.id }) { tag ->
-                TagRow(tag = tag, onPlay = onPlay)
+                TagRow(
+                    tag = tag,
+                    isSelected = tag.id in selectedTagIds,
+                    isSelectionMode = selectedTagIds.isNotEmpty(),
+                    onPlay = onPlay,
+                    onTagClick = { onTagClick(tag.id) },
+                    onTagLongClick = { onTagLongClick(tag.id) }
+                )
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TagRow(tag: SavedTag, onPlay: (String) -> Unit) {
+private fun TagRow(
+    tag: SavedTag,
+    isSelected: Boolean,
+    isSelectionMode: Boolean,
+    onPlay: (String) -> Unit,
+    onTagClick: () -> Unit,
+    onTagLongClick: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .combinedClickable(
+                onClick = { if (isSelectionMode) onTagClick() },
+                onLongClick = onTagLongClick
+            )
+            .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else Color.Transparent)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -109,13 +136,22 @@ private fun TagRow(tag: SavedTag, onPlay: (String) -> Unit) {
             )
         }
 
-        // Play button
-        IconButton(onClick = { onPlay(tag.url) }, modifier = Modifier.size(44.dp)) {
-            Icon(
-                imageVector = Icons.Default.PlayArrow,
-                contentDescription = "Play",
-                tint = TangiblePurple,
-                modifier = Modifier.size(28.dp)
+        // Play button - disappear in selection mode
+        if (!isSelectionMode) {
+            IconButton(onClick = { onPlay(tag.url) }, modifier = Modifier.size(44.dp)) {
+                Icon(
+                    imageVector = Icons.Default.PlayArrow,
+                    contentDescription = "Play",
+                    tint = TangiblePurple,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        } else {
+            // Optional: show a checkbox or just rely on the background color
+            Checkbox(
+                checked = isSelected,
+                onCheckedChange = { onTagClick() },
+                colors = CheckboxDefaults.colors(checkedColor = TangiblePurple)
             )
         }
     }

@@ -21,6 +21,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.*
@@ -283,7 +284,8 @@ class MainActivity : ComponentActivity() {
                             movieProviders = providers
                             saveMovieProviders(providers)
                         },
-                        onGetServicesForRegion = { reg -> streamingRepository.getServicesForRegion(reg) }
+                        onGetServicesForRegion = { reg -> streamingRepository.getServicesForRegion(reg) },
+                        onDeleteTags = { deleteTags(it) }
                     )
 
                     if (showSuccessDialog) {
@@ -847,6 +849,11 @@ class MainActivity : ComponentActivity() {
         showSuccessDialog = true
         Log.d("Tangible", "Successfully wrote to tag")
     }
+
+    private fun deleteTags(tagIds: Set<String>) {
+        tagRepository.delete(tagIds)
+        savedTags = tagRepository.loadAll()
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -880,12 +887,23 @@ fun TangibleApp(
     onAlbumSelected: suspend (DiscogsSearchResult) -> TagMediaUris,
     movieProviders: List<MovieProvider>,
     onMovieProvidersChanged: (List<MovieProvider>) -> Unit,
-    onGetServicesForRegion: suspend (String) -> List<MovieProvider>
+    onGetServicesForRegion: suspend (String) -> List<MovieProvider>,
+    onDeleteTags: (Set<String>) -> Unit
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val showChrome = currentRoute == "collection" || currentRoute == "settings"
+
+    var selectedTagIds by remember { mutableStateOf(setOf<String>()) }
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+
+    // Clear selection when navigating away from collection
+    LaunchedEffect(currentRoute) {
+        if (currentRoute != "collection") {
+            selectedTagIds = emptySet()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -893,21 +911,29 @@ fun TangibleApp(
                 TopAppBar(
                     title = {
                         if (currentRoute == "collection") {
-                            Row(verticalAlignment = Alignment.Bottom) {
+                            if (selectedTagIds.isNotEmpty()) {
                                 Text(
-                                    text = "Tangible",
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    color = TangiblePurple
+                                    text = "${selectedTagIds.size} selected",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = MaterialTheme.colorScheme.onBackground
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Tap to Play",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Light,
-                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                                    color = Color(0xFF888899),
-                                    modifier = Modifier.padding(bottom = 4.dp)
-                                )
+                            } else {
+                                Row(verticalAlignment = Alignment.Bottom) {
+                                    Text(
+                                        text = "Tangible",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        color = TangiblePurple
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Tap to Play",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Light,
+                                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                        color = Color(0xFF888899),
+                                        modifier = Modifier.padding(bottom = 4.dp)
+                                    )
+                                }
                             }
                         } else {
                             Text(
@@ -915,6 +941,17 @@ fun TangibleApp(
                                 style = MaterialTheme.typography.titleLarge,
                                 color = MaterialTheme.colorScheme.onBackground
                             )
+                        }
+                    },
+                    actions = {
+                        if (currentRoute == "collection" && selectedTagIds.isNotEmpty()) {
+                            IconButton(onClick = { showDeleteConfirmation = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Delete",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -946,13 +983,54 @@ fun TangibleApp(
         },
         containerColor = TangibleBackground
     ) { innerPadding ->
+        if (showDeleteConfirmation) {
+            AlertDialog(
+                onDismissRequest = { showDeleteConfirmation = false },
+                title = { Text("Delete Tags") },
+                text = { Text("Are you sure you want to delete the ${selectedTagIds.size} selected tags?") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            onDeleteTags(selectedTagIds)
+                            selectedTagIds = emptySet()
+                            showDeleteConfirmation = false
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Delete")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteConfirmation = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
         NavHost(
             navController = navController,
             startDestination = "collection",
             modifier = Modifier.padding(innerPadding)
         ) {
             composable("collection") {
-                MainScreen(tags = savedTags, onPlay = onPlay)
+                MainScreen(
+                    tags = savedTags,
+                    selectedTagIds = selectedTagIds,
+                    onPlay = onPlay,
+                    onTagClick = { tagId ->
+                        if (selectedTagIds.isNotEmpty()) {
+                            selectedTagIds = if (tagId in selectedTagIds) {
+                                selectedTagIds - tagId
+                            } else {
+                                selectedTagIds + tagId
+                            }
+                        }
+                    },
+                    onTagLongClick = { tagId ->
+                        selectedTagIds = selectedTagIds + tagId
+                    }
+                )
             }
             composable("write_tag") {
                 WriteTagScreen(
