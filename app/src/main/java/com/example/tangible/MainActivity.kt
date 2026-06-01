@@ -94,7 +94,9 @@ data class SavedTag(
     val type: String, // "MUSIC" or "MOVIE"
     val url: String,
     val imageUrl: String? = null,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val customService: String? = null,
+    val customOutputId: String? = null
 )
 
 const val SONOS_ALL_SPEAKERS = "ALL_SPEAKERS"
@@ -199,7 +201,11 @@ class MainActivity : ComponentActivity() {
                 ) {
                     TangibleApp(
                         savedTags = savedTags,
-                        onPlay = { url -> playTagUrl(url) },
+                        onPlay = { tag -> playTagUrl(tag) },
+                        onUpdateTag = { tag ->
+                            tagRepository.update(tag)
+                            savedTags = tagRepository.loadAll()
+                        },
                         isWritingMode = isWritingMode,
                         writeError = writeError,
                         selectedService = selectedService,
@@ -412,9 +418,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun playOnChromecast(uri: String, service: MusicService) {
-        val host = chromecastDevices.firstOrNull { it.id == selectedChromecastId }?.host
-            ?: selectedChromecastHost
+    private fun playOnChromecast(uri: String, service: MusicService, customDeviceId: String? = null) {
+        val host = if (customDeviceId != null) {
+            chromecastDevices.find { it.id == customDeviceId }?.host
+        } else {
+            chromecastDevices.firstOrNull { it.id == selectedChromecastId }?.host ?: selectedChromecastHost
+        }
         if (host == null) {
             Toast.makeText(this, "Please select a Google TV device in Settings", Toast.LENGTH_LONG).show()
             return
@@ -491,11 +500,19 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
     }
 
-    private fun handleIntent(intent: Intent) {
+    private fun playTagUrl(tag: SavedTag) {
+        handleIntent(Intent(Intent.ACTION_VIEW, Uri.parse(tag.url)), tag)
+    }
+
+    private fun handleIntent(intent: Intent, customTag: SavedTag? = null) {
         val action = intent.action
         val data: Uri? = intent.data
+        val dataString = intent.dataString
 
         Log.d("Tangible", "Handling intent: action=$action, data=$data, isWritingMode=$isWritingMode")
+
+        // Find saved tag for custom settings if not provided
+        val savedTag = customTag ?: savedTags.find { it.url == dataString }
 
         if (isWritingMode && (
                 NfcAdapter.ACTION_TAG_DISCOVERED == action ||
@@ -578,8 +595,19 @@ class MainActivity : ComponentActivity() {
         }
 
         if (movieToPlay != null && !isWritingMode) {
-            if (selectedMoviePlayer == MoviePlayer.GOOGLE_TV) {
-                playMovieOnGoogleTv(movieToPlay!!)
+            val effectiveMoviePlayer = when {
+                savedTag?.customOutputId == "THIS_DEVICE" -> MoviePlayer.THIS_DEVICE
+                savedTag?.customOutputId?.startsWith("CHROMECAST:") == true -> MoviePlayer.GOOGLE_TV
+                else -> selectedMoviePlayer
+            }
+            val effectiveChromecastId = if (savedTag?.customOutputId?.startsWith("CHROMECAST:") == true) {
+                savedTag.customOutputId.removePrefix("CHROMECAST:")
+            } else {
+                selectedChromecastId
+            }
+
+            if (effectiveMoviePlayer == MoviePlayer.GOOGLE_TV) {
+                playMovieOnGoogleTv(movieToPlay!!, effectiveChromecastId)
             } else {
                 playMovie(movieToPlay!!)
             }
@@ -587,36 +615,60 @@ class MainActivity : ComponentActivity() {
         }
 
         if ((uris.spotifyTrack != null || uris.spotifyAlbum != null || uris.ytm != null || uris.appleMusic != null) && !isWritingMode) {
-            Log.d("Tangible", "Action: selectedService=$selectedService, selectedSpeaker=$selectedSpeaker, uris=$uris")
+            val effectiveService = savedTag?.customService?.let { s ->
+                MusicService.entries.find { it.name == s }
+            } ?: selectedService
+
+            val effectiveSpeaker = when {
+                savedTag?.customOutputId == "THIS_DEVICE" -> MusicSpeaker.THIS_DEVICE
+                savedTag?.customOutputId == "SONOS_ALL" -> MusicSpeaker.SONOS
+                savedTag?.customOutputId?.startsWith("SONOS:") == true -> MusicSpeaker.SONOS
+                savedTag?.customOutputId?.startsWith("CHROMECAST:") == true -> MusicSpeaker.CHROMECAST
+                else -> selectedSpeaker
+            }
+            
+            val effectiveSonosIp = when {
+                savedTag?.customOutputId == "SONOS_ALL" -> SONOS_ALL_SPEAKERS
+                savedTag?.customOutputId?.startsWith("SONOS:") == true -> savedTag.customOutputId.removePrefix("SONOS:")
+                else -> selectedSonosIp
+            }
+
+            val effectiveChromecastId = if (savedTag?.customOutputId?.startsWith("CHROMECAST:") == true) {
+                savedTag.customOutputId.removePrefix("CHROMECAST:")
+            } else {
+                selectedChromecastId
+            }
+
+            Log.d("Tangible", "Action: effectiveService=$effectiveService, effectiveSpeaker=$effectiveSpeaker, uris=$uris")
             when {
-                selectedService == MusicService.SPOTIFY && selectedSpeaker == MusicSpeaker.THIS_DEVICE -> {
+                effectiveService == MusicService.SPOTIFY && effectiveSpeaker == MusicSpeaker.THIS_DEVICE -> {
                     (uris.spotifyTrack ?: uris.spotifyAlbum)?.let { playOnSpotify(it) }
                 }
-                selectedService == MusicService.YOUTUBE_MUSIC && selectedSpeaker == MusicSpeaker.THIS_DEVICE -> {
+                effectiveService == MusicService.YOUTUBE_MUSIC && effectiveSpeaker == MusicSpeaker.THIS_DEVICE -> {
                     uris.ytm?.let { playOnYouTubeMusic(it) }
                 }
-                selectedService == MusicService.APPLE_MUSIC && selectedSpeaker == MusicSpeaker.THIS_DEVICE -> {
+                effectiveService == MusicService.APPLE_MUSIC && effectiveSpeaker == MusicSpeaker.THIS_DEVICE -> {
                     uris.appleMusic?.let { playOnAppleMusic(it) }
                 }
-                selectedService == MusicService.SPOTIFY && selectedSpeaker == MusicSpeaker.SONOS -> {
-                    (uris.spotifyAlbum ?: uris.spotifyTrack)?.let { playOnSonos(it) }
+                effectiveService == MusicService.SPOTIFY && effectiveSpeaker == MusicSpeaker.SONOS -> {
+                    (uris.spotifyAlbum ?: uris.spotifyTrack)?.let { playOnSonos(it, effectiveSonosIp) }
                 }
-                selectedService == MusicService.YOUTUBE_MUSIC && selectedSpeaker == MusicSpeaker.SONOS -> {
+                effectiveService == MusicService.YOUTUBE_MUSIC && effectiveSpeaker == MusicSpeaker.SONOS -> {
                     Toast.makeText(this, "YouTube Music + Sonos not yet implemented", Toast.LENGTH_SHORT).show()
                 }
-                selectedService == MusicService.APPLE_MUSIC && selectedSpeaker == MusicSpeaker.SONOS -> {
-                    uris.appleMusic?.let { playOnSonos(it) }
+                effectiveService == MusicService.APPLE_MUSIC && effectiveSpeaker == MusicSpeaker.SONOS -> {
+                    uris.appleMusic?.let { playOnSonos(it, effectiveSonosIp) }
                 }
-                selectedService == MusicService.SPOTIFY && selectedSpeaker == MusicSpeaker.CHROMECAST -> {
-                    (uris.spotifyTrack ?: uris.spotifyAlbum)?.let { playOnChromecast(it, MusicService.SPOTIFY) }
+                effectiveService == MusicService.SPOTIFY && effectiveSpeaker == MusicSpeaker.CHROMECAST -> {
+                    (uris.spotifyTrack ?: uris.spotifyAlbum)?.let { playOnChromecast(it, MusicService.SPOTIFY, effectiveChromecastId) }
                 }
-                selectedService == MusicService.YOUTUBE_MUSIC && selectedSpeaker == MusicSpeaker.CHROMECAST -> {
-                    uris.ytm?.let { playOnChromecast(it, MusicService.YOUTUBE_MUSIC) }
+                effectiveService == MusicService.YOUTUBE_MUSIC && effectiveSpeaker == MusicSpeaker.CHROMECAST -> {
+                    uris.ytm?.let { playOnChromecast(it, MusicService.YOUTUBE_MUSIC, effectiveChromecastId) }
                 }
-                selectedService == MusicService.APPLE_MUSIC && selectedSpeaker == MusicSpeaker.CHROMECAST -> {
-                    uris.appleMusic?.let { playOnChromecast(it, MusicService.APPLE_MUSIC) }
+                effectiveService == MusicService.APPLE_MUSIC && effectiveSpeaker == MusicSpeaker.CHROMECAST -> {
+                    uris.appleMusic?.let { playOnChromecast(it, MusicService.APPLE_MUSIC, effectiveChromecastId) }
                 }
-                else -> Log.w("Tangible", "No action for service $selectedService and speaker $selectedSpeaker")
+                else -> Log.w("Tangible", "No action for service $effectiveService and speaker $effectiveSpeaker")
             }
             return
         }
@@ -624,9 +676,13 @@ class MainActivity : ComponentActivity() {
         Log.d("Tangible", "No URIs found or in writing mode. uris=$uris, isWritingMode=$isWritingMode")
     }
 
-    private fun playMovieOnGoogleTv(url: String) {
-        val host = chromecastDevices.firstOrNull { it.id == selectedChromecastId }?.host
-            ?: selectedChromecastHost
+    private fun playMovieOnGoogleTv(url: String, customDeviceId: String? = null) {
+        val host = if (customDeviceId != null) {
+            chromecastDevices.find { it.id == customDeviceId }?.host
+        } else {
+            chromecastDevices.firstOrNull { it.id == selectedChromecastId }?.host ?: selectedChromecastHost
+        }
+        
         if (host == null) {
             Toast.makeText(this, "Please select a Google TV device in Settings", Toast.LENGTH_LONG).show()
             return
@@ -702,8 +758,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun playOnSonos(musicUri: String) {
-        val ip = selectedSonosIp
+    private fun playOnSonos(musicUri: String, customIp: String? = null) {
+        val ip = customIp ?: selectedSonosIp
         if (ip == null) {
             Toast.makeText(this, "Please select a Sonos speaker in Settings", Toast.LENGTH_LONG).show()
             return
@@ -902,10 +958,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun playTagUrl(url: String) {
-        handleIntent(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-    }
-
     private fun finishWriting() {
         val info = pendingTagInfo
         if (info != null) {
@@ -939,7 +991,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun TangibleApp(
     savedTags: List<SavedTag>,
-    onPlay: (String) -> Unit,
+    onPlay: (SavedTag) -> Unit,
+    onUpdateTag: (SavedTag) -> Unit,
     isWritingMode: Boolean,
     writeError: String?,
     selectedService: MusicService,
@@ -1122,7 +1175,11 @@ fun TangibleApp(
                     },
                     onTagLongClick = { tagId ->
                         selectedTagIds = selectedTagIds + tagId
-                    }
+                    },
+                    onUpdateTag = onUpdateTag,
+                    onDeleteTag = { onDeleteTags(setOf(it)) },
+                    sonosSpeakers = sonosSpeakers,
+                    chromecastDevices = chromecastDevices
                 )
             }
             composable("write_tag") {

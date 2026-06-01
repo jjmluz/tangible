@@ -1,5 +1,6 @@
 package com.example.tangible.ui
 
+import android.net.Uri
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -44,11 +45,16 @@ fun MainScreen(
     movieSortOrder: SortOrder = SortOrder.ASCENDING,
     onMusicSortChange: (SortField, SortOrder) -> Unit = { _, _ -> },
     onMovieSortChange: (SortField, SortOrder) -> Unit = { _, _ -> },
-    onPlay: (String) -> Unit,
+    onPlay: (SavedTag) -> Unit,
     onTagClick: (String) -> Unit,
-    onTagLongClick: (String) -> Unit
+    onTagLongClick: (String) -> Unit,
+    onUpdateTag: (SavedTag) -> Unit = {},
+    onDeleteTag: (String) -> Unit = {},
+    sonosSpeakers: List<com.example.tangible.data.SonosSpeaker> = emptyList(),
+    chromecastDevices: List<com.example.tangible.data.ChromecastDevice> = emptyList()
 ) {
     var selectedType by remember { mutableStateOf("MUSIC") }
+    var tagToEdit by remember { mutableStateOf<SavedTag?>(null) }
     
     val currentSortField = if (selectedType == "MUSIC") musicSortField else movieSortField
     val currentSortOrder = if (selectedType == "MUSIC") musicSortOrder else movieSortOrder
@@ -60,6 +66,23 @@ fun MainScreen(
             SortField.SUBTITLE -> filtered.sortedBy { it.subtitle.lowercase() }
             SortField.DATE_ADDED -> filtered.sortedBy { it.createdAt }
         }.let { if (currentSortOrder == SortOrder.DESCENDING) it.reversed() else it }
+    }
+
+    if (tagToEdit != null) {
+        TagDetailsModal(
+            tag = tagToEdit!!,
+            onDismiss = { tagToEdit = null },
+            onUpdate = { updated ->
+                onUpdateTag(updated)
+                tagToEdit = null
+            },
+            onDelete = {
+                onDeleteTag(tagToEdit!!.id)
+                tagToEdit = null
+            },
+            sonosSpeakers = sonosSpeakers,
+            chromecastDevices = chromecastDevices
+        )
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -87,7 +110,7 @@ fun MainScreen(
                         shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
                         icon = { Icon(Icons.Default.Movie, contentDescription = null) }
                     ) {
-                        Text("Movies")
+                        Text("Movie")
                     }
                 }
 
@@ -131,7 +154,8 @@ fun MainScreen(
                         tag = tag,
                         isSelected = tag.id in selectedTagIds,
                         isSelectionMode = selectedTagIds.isNotEmpty(),
-                        onPlay = onPlay,
+                        onPlay = { onPlay(tag) },
+                        onEdit = { tagToEdit = tag },
                         onTagClick = { onTagClick(tag.id) },
                         onTagLongClick = { onTagLongClick(tag.id) }
                     )
@@ -219,13 +243,177 @@ private fun SortMenu(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun TagDetailsModal(
+    tag: SavedTag,
+    onDismiss: () -> Unit,
+    onUpdate: (SavedTag) -> Unit,
+    onDelete: () -> Unit,
+    sonosSpeakers: List<com.example.tangible.data.SonosSpeaker>,
+    chromecastDevices: List<com.example.tangible.data.ChromecastDevice>
+) {
+    val isTangibleUri = tag.url.startsWith("tangible://")
+    
+    // Parse available services if it's a Tangible URI
+    val availableServices = remember(tag) {
+        if (!isTangibleUri) return@remember emptyList<String>()
+        val uri = Uri.parse(tag.url)
+        if (tag.type == "MUSIC") {
+            buildList {
+                if (uri.getQueryParameter("spotify_track") != null || uri.getQueryParameter("spotify_album") != null) add("SPOTIFY")
+                if (uri.getQueryParameter("ytm") != null) add("YOUTUBE_MUSIC")
+                if (uri.getQueryParameter("apple_music") != null) add("APPLE_MUSIC")
+            }
+        } else {
+            // For movies, we can show the provider names or just "Auto-resolve"
+            listOf("AUTO")
+        }
+    }
+
+    var selectedService by remember { mutableStateOf(tag.customService ?: "DEFAULT") }
+    var selectedOutputId by remember { mutableStateOf(tag.customOutputId ?: "DEFAULT") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(tag.title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                // Streaming Service Dropdown
+                DetailDropdown(
+                    label = "Streaming service",
+                    selectedId = selectedService,
+                    onSelectedChange = { selectedService = it },
+                    options = buildList {
+                        add("DEFAULT" to "Default")
+                        if (isTangibleUri) {
+                            if (tag.type == "MUSIC") {
+                                availableServices.forEach { s ->
+                                    val name = when(s) {
+                                        "SPOTIFY" -> "Spotify"
+                                        "YOUTUBE_MUSIC" -> "YouTube Music"
+                                        "APPLE_MUSIC" -> "Apple Music"
+                                        else -> s
+                                    }
+                                    add(s to name)
+                                }
+                            } else {
+                                add("AUTO" to "Auto-resolve")
+                            }
+                        } else {
+                            // Direct link
+                            val serviceName = when {
+                                tag.url.contains("spotify.com") -> "Spotify"
+                                tag.url.contains("youtube.com") -> "YouTube Music"
+                                tag.url.contains("apple.com") -> "Apple Music"
+                                else -> "Direct Link"
+                            }
+                            add("DIRECT" to serviceName)
+                        }
+                    },
+                    enabled = isTangibleUri
+                )
+
+                // Output Dropdown
+                DetailDropdown(
+                    label = "Output",
+                    selectedId = selectedOutputId,
+                    onSelectedChange = { selectedOutputId = it },
+                    options = buildList {
+                        add("DEFAULT" to "Default")
+                        if (isTangibleUri) {
+                            add("THIS_DEVICE" to "This device")
+                            if (tag.type == "MUSIC") {
+                                add("SONOS_ALL" to "Sonos: All speakers")
+                                sonosSpeakers.forEach { add("SONOS:${it.ip}" to "Sonos: ${it.name}") }
+                            }
+                            chromecastDevices.forEach { add("CHROMECAST:${it.id}" to "Google TV: ${it.name}") }
+                        } else {
+                            add("THIS_DEVICE" to "This device")
+                        }
+                    },
+                    enabled = isTangibleUri
+                )
+            }
+        },
+        confirmButton = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(
+                    onClick = onDelete,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
+                TextButton(onClick = {
+                    onUpdate(tag.copy(
+                        customService = if (selectedService == "DEFAULT") null else selectedService,
+                        customOutputId = if (selectedOutputId == "DEFAULT") null else selectedOutputId
+                    ))
+                }) {
+                    Text("Save")
+                }
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DetailDropdown(
+    label: String,
+    selectedId: String,
+    onSelectedChange: (String) -> Unit,
+    options: List<Pair<String, String>>,
+    enabled: Boolean = true
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedName = options.find { it.first == selectedId }?.second ?: options.firstOrNull()?.second ?: ""
+
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = TangiblePurple)
+        }
+        Spacer(Modifier.height(4.dp))
+        ExposedDropdownMenuBox(
+            expanded = expanded && enabled,
+            onExpandedChange = { if (enabled) expanded = !expanded }
+        ) {
+            OutlinedTextField(
+                value = selectedName,
+                onValueChange = {},
+                readOnly = true,
+                enabled = enabled,
+                trailingIcon = { if (enabled) ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+            )
+            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                options.forEach { (id, name) ->
+                    DropdownMenuItem(
+                        text = { Text(name) },
+                        onClick = {
+                            onSelectedChange(id)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
 @Composable
 private fun TagRow(
     tag: SavedTag,
     isSelected: Boolean,
     isSelectionMode: Boolean,
-    onPlay: (String) -> Unit,
+    onPlay: () -> Unit,
+    onEdit: () -> Unit,
     onTagClick: () -> Unit,
     onTagLongClick: () -> Unit
 ) {
@@ -233,13 +421,14 @@ private fun TagRow(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
-                onClick = { if (isSelectionMode) onTagClick() },
+                onClick = { if (isSelectionMode) onTagClick() else onEdit() },
                 onLongClick = onTagLongClick
             )
             .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else Color.Transparent)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // ... (Cover art remains the same)
         // Cover art
         Box(
             modifier = Modifier
@@ -308,7 +497,7 @@ private fun TagRow(
 
         // Play button - disappear in selection mode
         if (!isSelectionMode) {
-            IconButton(onClick = { onPlay(tag.url) }, modifier = Modifier.size(44.dp)) {
+            IconButton(onClick = onPlay, modifier = Modifier.size(44.dp)) {
                 Icon(
                     imageVector = Icons.Default.PlayArrow,
                     contentDescription = "Play",
