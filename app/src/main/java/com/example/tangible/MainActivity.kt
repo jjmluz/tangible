@@ -123,7 +123,9 @@ class MainActivity : ComponentActivity() {
     private var selectedSpeaker by mutableStateOf(MusicSpeaker.THIS_DEVICE)
     private var selectedSonosIp by mutableStateOf<String?>(null)
     private var sonosSpeakers by mutableStateOf<List<SonosSpeaker>>(emptyList())
+    private var isSonosRefreshing by mutableStateOf(false)
     private var chromecastDevices by mutableStateOf<List<ChromecastDevice>>(emptyList())
+    private var isChromecastRefreshing by mutableStateOf(false)
     private var selectedChromecastId by mutableStateOf<String?>(null)
     private var selectedChromecastName by mutableStateOf<String?>(null)
     private var selectedChromecastHost: String? = null
@@ -168,6 +170,8 @@ class MainActivity : ComponentActivity() {
         selectedMoviePlayer = MoviePlayer.entries.find { it.name == moviePlayerValue } ?: MoviePlayer.THIS_DEVICE
         region = prefs.getString("region", "US") ?: "US"
         loadMovieProviders()
+        loadSonosSpeakers()
+        loadChromecastDevices()
         savedTags = tagRepository.loadAll()
 
         intent?.let { handleIntent(it) }
@@ -209,6 +213,7 @@ class MainActivity : ComponentActivity() {
                             prefs.edit().putString("selected_sonos_ip", ip).apply()
                         },
                         onRefreshSonos = { refreshSonosSpeakers() },
+                        isSonosRefreshing = isSonosRefreshing,
                         chromecastDevices = chromecastDevices,
                         selectedChromecastId = selectedChromecastId,
                         onChromecastDeviceSelected = { id ->
@@ -224,6 +229,7 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onRefreshChromecast = { refreshChromecastDevices() },
+                        isChromecastRefreshing = isChromecastRefreshing,
                         selectedMoviePlayer = selectedMoviePlayer,
                         onMoviePlayerSelected = {
                             selectedMoviePlayer = it
@@ -317,19 +323,57 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun saveSonosSpeakers(speakers: List<SonosSpeaker>) {
+        prefs.edit().putString("cached_sonos_speakers", gson.toJson(speakers)).apply()
+    }
+
+    private fun loadSonosSpeakers() {
+        val json = prefs.getString("cached_sonos_speakers", null)
+        if (json != null) {
+            val type = object : TypeToken<List<SonosSpeaker>>() {}.type
+            sonosSpeakers = gson.fromJson(json, type)
+        }
+    }
+
+    private fun saveChromecastDevices(devices: List<ChromecastDevice>) {
+        prefs.edit().putString("cached_chromecast_devices", gson.toJson(devices)).apply()
+    }
+
+    private fun loadChromecastDevices() {
+        val json = prefs.getString("cached_chromecast_devices", null)
+        if (json != null) {
+            val type = object : TypeToken<List<ChromecastDevice>>() {}.type
+            chromecastDevices = gson.fromJson(json, type)
+        }
+    }
+
     private fun refreshSonosSpeakers() {
+        if (isSonosRefreshing) return
+        isSonosRefreshing = true
         lifecycleScope.launch {
-            sonosSpeakers = sonosDiscovery.discoverSpeakers()
+            val speakers = sonosDiscovery.discoverSpeakers()
+            sonosSpeakers = speakers
+            saveSonosSpeakers(speakers)
             val ip = selectedSonosIp
             if (ip != null && ip != SONOS_ALL_SPEAKERS) {
-                sonosRepository.getPlayingInfo(ip)
+                try {
+                    sonosRepository.getPlayingInfo(ip)
+                } catch (e: Exception) {
+                    Log.e("Tangible", "Error getting Sonos info", e)
+                }
             }
+            isSonosRefreshing = false
         }
     }
 
     private fun refreshChromecastDevices() {
+        if (isChromecastRefreshing) return
+        isChromecastRefreshing = true
         lifecycleScope.launch {
-            chromecastDevices = chromecastDiscovery.discoverDevices()
+            val devices = chromecastDiscovery.discoverDevices()
+            chromecastDevices = devices
+            saveChromecastDevices(devices)
+            isChromecastRefreshing = false
         }
     }
 
@@ -871,10 +915,12 @@ fun TangibleApp(
     selectedSonosIp: String?,
     onSonosSpeakerSelected: (String) -> Unit,
     onRefreshSonos: () -> Unit,
+    isSonosRefreshing: Boolean,
     chromecastDevices: List<ChromecastDevice>,
     selectedChromecastId: String?,
     onChromecastDeviceSelected: (String) -> Unit,
     onRefreshChromecast: () -> Unit,
+    isChromecastRefreshing: Boolean,
     selectedMoviePlayer: MoviePlayer,
     onMoviePlayerSelected: (MoviePlayer) -> Unit,
     onStartWriting: (TagWriteInfo) -> Unit,
@@ -1079,10 +1125,12 @@ fun TangibleApp(
                     selectedSonosIp = selectedSonosIp,
                     onSonosSpeakerSelected = onSonosSpeakerSelected,
                     onRefreshSonos = onRefreshSonos,
+                    isSonosRefreshing = isSonosRefreshing,
                     chromecastDevices = chromecastDevices,
                     selectedChromecastId = selectedChromecastId,
                     onChromecastDeviceSelected = onChromecastDeviceSelected,
-                    onRefreshChromecast = onRefreshChromecast
+                    onRefreshChromecast = onRefreshChromecast,
+                    isChromecastRefreshing = isChromecastRefreshing
                 )
             }
             composable("movie_player") {
@@ -1093,7 +1141,8 @@ fun TangibleApp(
                     chromecastDevices = chromecastDevices,
                     selectedChromecastId = selectedChromecastId,
                     onChromecastDeviceSelected = onChromecastDeviceSelected,
-                    onRefreshChromecast = onRefreshChromecast
+                    onRefreshChromecast = onRefreshChromecast,
+                    isChromecastRefreshing = isChromecastRefreshing
                 )
             }
             composable("movie_region") {

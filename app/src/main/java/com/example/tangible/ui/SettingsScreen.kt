@@ -215,11 +215,22 @@ fun MusicSpeakerScreen(
     selectedSonosIp: String?,
     onSonosSpeakerSelected: (String) -> Unit,
     onRefreshSonos: () -> Unit,
+    isSonosRefreshing: Boolean,
     chromecastDevices: List<ChromecastDevice>,
     selectedChromecastId: String?,
     onChromecastDeviceSelected: (String) -> Unit,
     onRefreshChromecast: () -> Unit,
+    isChromecastRefreshing: Boolean,
 ) {
+    LaunchedEffect(selectedSpeaker) {
+        if (selectedSpeaker == MusicSpeaker.CHROMECAST && chromecastDevices.isEmpty() && !isChromecastRefreshing) {
+            onRefreshChromecast()
+        }
+        if (selectedSpeaker == MusicSpeaker.SONOS && sonosSpeakers.isEmpty() && !isSonosRefreshing) {
+            onRefreshSonos()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -278,7 +289,8 @@ fun MusicSpeakerScreen(
                     subtitles = chromecastDevices.associate { it.id to it.model },
                     selectedId = selectedChromecastId,
                     onSelect = onChromecastDeviceSelected,
-                    onRefresh = onRefreshChromecast
+                    onRefresh = onRefreshChromecast,
+                    isRefreshing = isChromecastRefreshing
                 )
                 if (selectedService == MusicService.SPOTIFY) {
                     Spacer(Modifier.height(12.dp))
@@ -304,7 +316,8 @@ fun MusicSpeakerScreen(
                     subtitles = sonosSpeakers.associate { it.ip to it.model },
                     selectedId = selectedSonosIp,
                     onSelect = onSonosSpeakerSelected,
-                    onRefresh = onRefreshSonos
+                    onRefresh = onRefreshSonos,
+                    isRefreshing = isSonosRefreshing
                 )
             }
 
@@ -325,7 +338,14 @@ fun MoviePlayerScreen(
     selectedChromecastId: String?,
     onChromecastDeviceSelected: (String) -> Unit,
     onRefreshChromecast: () -> Unit,
+    isChromecastRefreshing: Boolean,
 ) {
+    LaunchedEffect(selectedMoviePlayer) {
+        if (selectedMoviePlayer == MoviePlayer.GOOGLE_TV && chromecastDevices.isEmpty() && !isChromecastRefreshing) {
+            onRefreshChromecast()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -376,7 +396,8 @@ fun MoviePlayerScreen(
                     subtitles = chromecastDevices.associate { it.id to it.model },
                     selectedId = selectedChromecastId,
                     onSelect = onChromecastDeviceSelected,
-                    onRefresh = onRefreshChromecast
+                    onRefresh = onRefreshChromecast,
+                    isRefreshing = isChromecastRefreshing
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
@@ -516,6 +537,7 @@ private fun DeviceSection(
     selectedId: String?,
     onSelect: (String) -> Unit,
     onRefresh: () -> Unit,
+    isRefreshing: Boolean = false,
 ) {
     Row(
         modifier = Modifier
@@ -529,8 +551,16 @@ private fun DeviceSection(
             style = MaterialTheme.typography.labelMedium,
             color = TangiblePurple
         )
-        IconButton(onClick = onRefresh) {
-            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+        if (isRefreshing) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                strokeWidth = 2.dp,
+                color = TangiblePurple
+            )
+        } else {
+            IconButton(onClick = onRefresh) {
+                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+            }
         }
     }
     if (devices.isEmpty()) {
