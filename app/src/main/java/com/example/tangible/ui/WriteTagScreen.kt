@@ -43,9 +43,10 @@ data class TagWriteInfo(
     val url: String
 )
 
-enum class WriteAsOption {
-    TANGIBLE, SPOTIFY, YOUTUBE_MUSIC, APPLE_MUSIC
-}
+data class WriteOption(
+    val id: String,
+    val label: String
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,7 +72,7 @@ fun WriteTagScreen(
     var searchResults by remember { mutableStateOf<List<DiscogsSearchResult>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
     var isLoadingFirstTrack by remember { mutableStateOf(false) }
-    var writeAs by remember { mutableStateOf(WriteAsOption.TANGIBLE) }
+    var writeOptionId by remember { mutableStateOf("tangible") }
     var selectedUris by remember { mutableStateOf(TagMediaUris()) }
     var selectedAlbum by remember { mutableStateOf<DiscogsSearchResult?>(null) }
 
@@ -97,6 +98,7 @@ fun WriteTagScreen(
         selectedMovie = null
         selectedUris = TagMediaUris()
         streamingResult = null
+        writeOptionId = "tangible"
         if (tagType == TagType.MUSIC) {
             movieSearchQuery = ""
             movieSearchResults = emptyList()
@@ -106,31 +108,39 @@ fun WriteTagScreen(
         }
     }
 
-    // Music URL derivation
-    LaunchedEffect(writeAs, selectedUris, tagType) {
-        if (tagType != TagType.MUSIC) return@LaunchedEffect
-        url = when (writeAs) {
-            WriteAsOption.TANGIBLE -> {
-                val queryParams = mutableListOf<String>()
-                selectedUris.spotifyTrack?.let { queryParams.add("spotify_track=${Uri.encode(it)}") }
-                selectedUris.spotifyAlbum?.let { queryParams.add("spotify_album=${Uri.encode(it)}") }
-                selectedUris.ytm?.let { queryParams.add("ytm=${Uri.encode(it)}") }
-                selectedUris.appleMusic?.let { queryParams.add("apple_music=${Uri.encode(it)}") }
-                if (queryParams.isNotEmpty()) "tangible://play?${queryParams.joinToString("&")}" else ""
+    // URL derivation
+    LaunchedEffect(writeOptionId, selectedUris, streamingResult, tagType) {
+        url = when {
+            writeOptionId == "tangible" -> {
+                if (tagType == TagType.MUSIC) {
+                    val queryParams = mutableListOf<String>()
+                    selectedUris.spotifyTrack?.let { queryParams.add("spotify_track=${Uri.encode(it)}") }
+                    selectedUris.spotifyAlbum?.let { queryParams.add("spotify_album=${Uri.encode(it)}") }
+                    selectedUris.ytm?.let { queryParams.add("ytm=${Uri.encode(it)}") }
+                    selectedUris.appleMusic?.let { queryParams.add("apple_music=${Uri.encode(it)}") }
+                    if (queryParams.isNotEmpty()) "tangible://play?${queryParams.joinToString("&")}" else ""
+                } else {
+                    streamingResult?.tagUrl ?: ""
+                }
             }
-            WriteAsOption.SPOTIFY -> when {
+            writeOptionId == "spotify" -> when {
                 selectedUris.spotifyAlbum != null -> "https://open.spotify.com/album/${selectedUris.spotifyAlbum}"
                 selectedUris.spotifyTrack != null -> "https://open.spotify.com/track/${selectedUris.spotifyTrack}"
                 else -> ""
             }
-            WriteAsOption.YOUTUBE_MUSIC -> {
+            writeOptionId == "ytm" -> {
                 val id = selectedUris.ytm
                 if (id != null && !id.startsWith("http")) "https://music.youtube.com/playlist?list=$id" else id ?: ""
             }
-            WriteAsOption.APPLE_MUSIC -> {
+            writeOptionId == "apple" -> {
                 val id = selectedUris.appleMusic
                 if (id != null && !id.startsWith("http")) "https://music.apple.com/album/$id" else id ?: ""
             }
+            writeOptionId.startsWith("direct:") -> {
+                val serviceId = writeOptionId.removePrefix("direct:")
+                streamingResult?.options?.find { it.serviceId == serviceId }?.link ?: ""
+            }
+            else -> ""
         }
     }
 
@@ -146,12 +156,6 @@ fun WriteTagScreen(
         streamingResult = null
         streamingResult = onGetMovieStreaming(movie.id)
         isLoadingStreaming = false
-    }
-
-    // Movie URL comes from the streaming result
-    LaunchedEffect(streamingResult, tagType) {
-        if (tagType != TagType.MOVIE) return@LaunchedEffect
-        url = streamingResult?.tagUrl ?: ""
     }
 
     // Music search debouncing
@@ -229,13 +233,14 @@ fun WriteTagScreen(
                 tagType = tagType,
                 selectedAlbum = selectedAlbum,
                 selectedMovie = selectedMovie,
+                selectedUris = selectedUris,
                 isLoadingFirstTrack = isLoadingFirstTrack,
                 isLoadingStreaming = isLoadingStreaming,
                 streamingResult = streamingResult,
                 region = region,
                 url = url,
-                writeAs = writeAs,
-                onWriteAsChange = { writeAs = it },
+                writeOptionId = writeOptionId,
+                onWriteOptionIdChange = { writeOptionId = it },
                 writeError = writeError,
                 onWriteClick = {
                     val title = when (tagType) {
@@ -406,13 +411,14 @@ private fun WriteTagConfirmContent(
     tagType: TagType,
     selectedAlbum: DiscogsSearchResult?,
     selectedMovie: TmdbMovieResult?,
+    selectedUris: TagMediaUris,
     isLoadingFirstTrack: Boolean,
     isLoadingStreaming: Boolean,
     streamingResult: MovieStreamingResult?,
     region: String,
     url: String,
-    writeAs: WriteAsOption,
-    onWriteAsChange: (WriteAsOption) -> Unit,
+    writeOptionId: String,
+    onWriteOptionIdChange: (String) -> Unit,
     writeError: String?,
     onWriteClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -420,6 +426,26 @@ private fun WriteTagConfirmContent(
     val isLoading = isLoadingFirstTrack || isLoadingStreaming
     var showWriteAsHelp by remember { mutableStateOf(false) }
     var showUrlPreview by remember { mutableStateOf(false) }
+
+    val writeOptions = remember(tagType, selectedUris, streamingResult) {
+        val list = mutableListOf(WriteOption("tangible", "Tangible URI"))
+        if (tagType == TagType.MUSIC) {
+            if (selectedUris.spotifyTrack != null || selectedUris.spotifyAlbum != null) {
+                list.add(WriteOption("spotify", "Spotify URL"))
+            }
+            if (selectedUris.ytm != null) {
+                list.add(WriteOption("ytm", "YouTube Music URL"))
+            }
+            if (selectedUris.appleMusic != null) {
+                list.add(WriteOption("apple", "Apple Music URL"))
+            }
+        } else {
+            streamingResult?.options?.forEach { opt ->
+                list.add(WriteOption("direct:${opt.serviceId}", "${opt.serviceName} URL"))
+            }
+        }
+        list
+    }
 
     if (showWriteAsHelp) {
         AlertDialog(
@@ -577,22 +603,19 @@ private fun WriteTagConfirmContent(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (tagType == TagType.MUSIC) {
-                    WriteAsDropdown(
-                        writeAs = writeAs,
-                        onWriteAsChange = onWriteAsChange,
-                        modifier = Modifier.weight(1f)
+                WriteAsDropdown(
+                    selectedId = writeOptionId,
+                    onSelectedIdChange = onWriteOptionIdChange,
+                    options = writeOptions,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = { showWriteAsHelp = true }) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.HelpOutline,
+                        contentDescription = "Help",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
                     )
-                    IconButton(onClick = { showWriteAsHelp = true }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.HelpOutline,
-                            contentDescription = "Help",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                } else {
-                    Spacer(modifier = Modifier.weight(1f))
                 }
 
                 IconButton(onClick = { showUrlPreview = true }) {
@@ -622,23 +645,21 @@ private fun WriteTagConfirmContent(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WriteAsDropdown(
-    writeAs: WriteAsOption,
-    onWriteAsChange: (WriteAsOption) -> Unit,
+    selectedId: String,
+    onSelectedIdChange: (String) -> Unit,
+    options: List<WriteOption>,
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val currentOption = options.find { it.id == selectedId } ?: options.firstOrNull()
+
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = !expanded },
         modifier = modifier
     ) {
         OutlinedTextField(
-            value = when (writeAs) {
-                WriteAsOption.TANGIBLE -> "Tangible URI"
-                WriteAsOption.SPOTIFY -> "Spotify URL"
-                WriteAsOption.YOUTUBE_MUSIC -> "YouTube Music URL"
-                WriteAsOption.APPLE_MUSIC -> "Apple Music URL"
-            },
+            value = currentOption?.label ?: "",
             onValueChange = {},
             readOnly = true,
             label = { Text("Write as") },
@@ -652,22 +673,15 @@ private fun WriteAsDropdown(
             expanded = expanded,
             onDismissRequest = { expanded = false }
         ) {
-            DropdownMenuItem(
-                text = { Text("Tangible URI") },
-                onClick = { onWriteAsChange(WriteAsOption.TANGIBLE); expanded = false }
-            )
-            DropdownMenuItem(
-                text = { Text("Spotify URL") },
-                onClick = { onWriteAsChange(WriteAsOption.SPOTIFY); expanded = false }
-            )
-            DropdownMenuItem(
-                text = { Text("YouTube Music URL") },
-                onClick = { onWriteAsChange(WriteAsOption.YOUTUBE_MUSIC); expanded = false }
-            )
-            DropdownMenuItem(
-                text = { Text("Apple Music URL") },
-                onClick = { onWriteAsChange(WriteAsOption.APPLE_MUSIC); expanded = false }
-            )
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.label) },
+                    onClick = {
+                        onSelectedIdChange(option.id)
+                        expanded = false
+                    }
+                )
+            }
         }
     }
 }

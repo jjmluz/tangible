@@ -59,6 +59,8 @@ import com.example.tangible.data.TmdbMovieResult
 import com.example.tangible.data.TmdbRepository
 import com.example.tangible.data.YouTubeRepository
 import com.example.tangible.ui.MainScreen
+import com.example.tangible.ui.SortField
+import com.example.tangible.ui.SortOrder
 import com.example.tangible.ui.MoviePlayerScreen
 import com.example.tangible.ui.MovieProvidersScreen
 import com.example.tangible.ui.MoviePlayer
@@ -133,6 +135,12 @@ class MainActivity : ComponentActivity() {
     private var region by mutableStateOf("US")
     private var movieProviders by mutableStateOf<List<MovieProvider>>(emptyList())
 
+    // Sorting
+    private var musicSortField by mutableStateOf(SortField.TITLE)
+    private var musicSortOrder by mutableStateOf(SortOrder.ASCENDING)
+    private var movieSortField by mutableStateOf(SortField.TITLE)
+    private var movieSortOrder by mutableStateOf(SortOrder.ASCENDING)
+
     // Repositories
     private val discogsToken = "REMOVED_SECRET"
     private val discogsRepository by lazy { DiscogsRepository(discogsToken) }
@@ -169,6 +177,13 @@ class MainActivity : ComponentActivity() {
         val moviePlayerValue = prefs.getString("selected_movie_player", MoviePlayer.THIS_DEVICE.name)
         selectedMoviePlayer = MoviePlayer.entries.find { it.name == moviePlayerValue } ?: MoviePlayer.THIS_DEVICE
         region = prefs.getString("region", "US") ?: "US"
+
+        // Load sort settings
+        musicSortField = SortField.valueOf(prefs.getString("music_sort_field", SortField.TITLE.name) ?: SortField.TITLE.name)
+        musicSortOrder = SortOrder.valueOf(prefs.getString("music_sort_order", SortOrder.ASCENDING.name) ?: SortOrder.ASCENDING.name)
+        movieSortField = SortField.valueOf(prefs.getString("movie_sort_field", SortField.TITLE.name) ?: SortField.TITLE.name)
+        movieSortOrder = SortOrder.valueOf(prefs.getString("movie_sort_order", SortOrder.ASCENDING.name) ?: SortOrder.ASCENDING.name)
+
         loadMovieProviders()
         loadSonosSpeakers()
         loadChromecastDevices()
@@ -291,7 +306,27 @@ class MainActivity : ComponentActivity() {
                             saveMovieProviders(providers)
                         },
                         onGetServicesForRegion = { reg -> streamingRepository.getServicesForRegion(reg) },
-                        onDeleteTags = { deleteTags(it) }
+                        onDeleteTags = { deleteTags(it) },
+                        musicSortField = musicSortField,
+                        musicSortOrder = musicSortOrder,
+                        movieSortField = movieSortField,
+                        movieSortOrder = movieSortOrder,
+                        onMusicSortChange = { field, order ->
+                            musicSortField = field
+                            musicSortOrder = order
+                            prefs.edit()
+                                .putString("music_sort_field", field.name)
+                                .putString("music_sort_order", order.name)
+                                .apply()
+                        },
+                        onMovieSortChange = { field, order ->
+                            movieSortField = field
+                            movieSortOrder = order
+                            prefs.edit()
+                                .putString("movie_sort_field", field.name)
+                                .putString("movie_sort_order", order.name)
+                                .apply()
+                        }
                     )
 
                     if (showSuccessDialog) {
@@ -934,7 +969,13 @@ fun TangibleApp(
     movieProviders: List<MovieProvider>,
     onMovieProvidersChanged: (List<MovieProvider>) -> Unit,
     onGetServicesForRegion: suspend (String) -> List<MovieProvider>,
-    onDeleteTags: (Set<String>) -> Unit
+    onDeleteTags: (Set<String>) -> Unit,
+    musicSortField: SortField,
+    musicSortOrder: SortOrder,
+    movieSortField: SortField,
+    movieSortOrder: SortOrder,
+    onMusicSortChange: (SortField, SortOrder) -> Unit,
+    onMovieSortChange: (SortField, SortOrder) -> Unit
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -1063,6 +1104,12 @@ fun TangibleApp(
                 MainScreen(
                     tags = savedTags,
                     selectedTagIds = selectedTagIds,
+                    musicSortField = musicSortField,
+                    musicSortOrder = musicSortOrder,
+                    movieSortField = movieSortField,
+                    movieSortOrder = movieSortOrder,
+                    onMusicSortChange = onMusicSortChange,
+                    onMovieSortChange = onMovieSortChange,
                     onPlay = onPlay,
                     onTagClick = { tagId ->
                         if (selectedTagIds.isNotEmpty()) {
