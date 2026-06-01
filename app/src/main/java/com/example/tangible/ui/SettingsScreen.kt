@@ -78,6 +78,8 @@ fun SettingsScreen(
     onMoviePlayerClick: () -> Unit,
     onMovieRegionClick: () -> Unit,
     onMovieProvidersClick: () -> Unit,
+    onExportClick: () -> Unit,
+    onImportClick: () -> Unit,
 ) {
     val regionName = REGIONS.find { it.first == selectedRegion }?.second ?: selectedRegion
 
@@ -103,7 +105,15 @@ fun SettingsScreen(
         Spacer(Modifier.height(8.dp))
         SettingsItem("Region", regionName, onMovieRegionClick)
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(24.dp))
+
+        SectionHeader("Backup")
+        Spacer(Modifier.height(8.dp))
+        SettingsItem("Export collection", "Save your tags to a JSON file", onExportClick)
+        Spacer(Modifier.height(8.dp))
+        SettingsItem("Import collection", "Restore tags from a JSON file", onImportClick)
+
+        Spacer(Modifier.height(32.dp))
     }
 }
 

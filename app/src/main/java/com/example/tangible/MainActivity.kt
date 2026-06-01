@@ -41,6 +41,7 @@ import com.example.tangible.ui.TangiblePurple
 import com.example.tangible.ui.TangibleSurface
 import com.example.tangible.ui.TangibleTheme
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import com.example.tangible.data.AdbRepository
 import com.example.tangible.data.AppleMusicRepository
 import com.example.tangible.data.ChromecastDevice
@@ -160,6 +161,46 @@ class MainActivity : ComponentActivity() {
     private val sonosRepository by lazy { SonosRepository() }
     private val chromecastDiscovery by lazy { ChromecastDiscovery(this) }
     private val adbRepository by lazy { AdbRepository(this) }
+
+    private val exportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        uri?.let { exportCollection(it) }
+    }
+
+    private val importLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { importCollection(it) }
+    }
+
+    private fun exportCollection(uri: Uri) {
+        lifecycleScope.launch {
+            try {
+                contentResolver.openOutputStream(uri)?.use { outputStream ->
+                    val json = tagRepository.exportJson()
+                    outputStream.write(json.toByteArray())
+                }
+                Toast.makeText(this@MainActivity, "Collection exported successfully!", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "Export failed: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun importCollection(uri: Uri) {
+        lifecycleScope.launch {
+            try {
+                contentResolver.openInputStream(uri)?.use { inputStream ->
+                    val json = inputStream.bufferedReader().readText()
+                    if (tagRepository.importJson(json)) {
+                        savedTags = tagRepository.loadAll()
+                        Toast.makeText(this@MainActivity, "Collection imported successfully!", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this@MainActivity, "Import failed: Invalid file format", Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "Import failed: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     private var spotifyAppRemote: SpotifyAppRemote? = null
 
@@ -332,7 +373,9 @@ class MainActivity : ComponentActivity() {
                                 .putString("movie_sort_field", field.name)
                                 .putString("movie_sort_order", order.name)
                                 .apply()
-                        }
+                        },
+                        onExportClick = { exportLauncher.launch("tangible_backup.json") },
+                        onImportClick = { importLauncher.launch(arrayOf("application/json")) }
                     )
 
                     if (showSuccessDialog) {
@@ -1028,7 +1071,9 @@ fun TangibleApp(
     movieSortField: SortField,
     movieSortOrder: SortOrder,
     onMusicSortChange: (SortField, SortOrder) -> Unit,
-    onMovieSortChange: (SortField, SortOrder) -> Unit
+    onMovieSortChange: (SortField, SortOrder) -> Unit,
+    onExportClick: () -> Unit,
+    onImportClick: () -> Unit
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -1209,7 +1254,9 @@ fun TangibleApp(
                     onMusicSpeakerClick = { navController.navigate("music_speaker") },
                     onMoviePlayerClick = { navController.navigate("movie_player") },
                     onMovieRegionClick = { navController.navigate("movie_region") },
-                    onMovieProvidersClick = { navController.navigate("movie_providers") }
+                    onMovieProvidersClick = { navController.navigate("movie_providers") },
+                    onExportClick = onExportClick,
+                    onImportClick = onImportClick
                 )
             }
             composable("music_service") {
