@@ -58,7 +58,7 @@ fun MovieProvidersScreen(
             TopAppBar(
                 title = {
                     Text(
-                        "Movie streaming services ($region)",
+                        "Streaming services (Movies)",
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onBackground
                     )

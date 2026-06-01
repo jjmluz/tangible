@@ -91,7 +91,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(8.dp))
         SettingsItem("Streaming service", selectedService.displayName, onMusicServiceClick)
         Spacer(Modifier.height(8.dp))
-        SettingsItem("Default speaker", selectedSpeaker.displayName, onMusicSpeakerClick)
+        SettingsItem("Default output", selectedSpeaker.displayName, onMusicSpeakerClick)
 
         Spacer(Modifier.height(24.dp))
 
@@ -99,7 +99,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(8.dp))
         SettingsItem("Streaming services", "Manage enabled services", onMovieProvidersClick)
         Spacer(Modifier.height(8.dp))
-        SettingsItem("Default player", selectedMoviePlayer.displayName, onMoviePlayerClick)
+        SettingsItem("Default output", selectedMoviePlayer.displayName, onMoviePlayerClick)
         Spacer(Modifier.height(8.dp))
         SettingsItem("Region", regionName, onMovieRegionClick)
 
@@ -165,7 +165,7 @@ fun MusicServiceScreen(
             TopAppBar(
                 title = {
                     Text(
-                        "Default music streaming service",
+                        "Streaming service (Music)",
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onBackground
                     )
@@ -236,7 +236,7 @@ fun MusicSpeakerScreen(
             TopAppBar(
                 title = {
                     Text(
-                        "Default music speaker",
+                        "Default output (Music)",
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onBackground
                     )
@@ -351,7 +351,7 @@ fun MoviePlayerScreen(
             TopAppBar(
                 title = {
                     Text(
-                        "Default movie player",
+                        "Default output (Movies)",
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onBackground
                     )
@@ -446,7 +446,7 @@ fun MovieRegionScreen(
             TopAppBar(
                 title = {
                     Text(
-                        "Movie streaming region",
+                        "Region (Movies)",
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onBackground
                     )
@@ -472,7 +472,6 @@ fun MovieRegionScreen(
             REGIONS.forEach { (code, name) ->
                 SelectionRow(
                     label = name,
-                    sublabel = code,
                     selected = code == selectedRegion,
                     onClick = { if (code != selectedRegion) pendingRegion = code }
                 )
