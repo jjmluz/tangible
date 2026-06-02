@@ -39,15 +39,16 @@ enum class SortOrder(val displayName: String) {
 fun MainScreen(
     tags: List<SavedTag>,
     selectedTagIds: Set<String>,
+    onPlay: (SavedTag) -> Unit,
+    onTagClick: (String) -> Unit,
+    onTagLongClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
     musicSortField: SortField = SortField.TITLE,
     musicSortOrder: SortOrder = SortOrder.ASCENDING,
     movieSortField: SortField = SortField.TITLE,
     movieSortOrder: SortOrder = SortOrder.ASCENDING,
     onMusicSortChange: (SortField, SortOrder) -> Unit = { _, _ -> },
     onMovieSortChange: (SortField, SortOrder) -> Unit = { _, _ -> },
-    onPlay: (SavedTag) -> Unit,
-    onTagClick: (String) -> Unit,
-    onTagLongClick: (String) -> Unit,
     onUpdateTag: (SavedTag) -> Unit = {},
     onDeleteTag: (String) -> Unit = {},
     sonosSpeakers: List<com.example.tangible.data.SonosSpeaker> = emptyList(),
@@ -85,7 +86,7 @@ fun MainScreen(
         )
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = modifier.fillMaxSize()) {
         if (tags.isNotEmpty()) {
             Row(
                 modifier = Modifier

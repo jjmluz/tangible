@@ -43,6 +43,8 @@ import com.example.tangible.ui.TangibleSurface
 import com.example.tangible.ui.TangibleTheme
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import com.example.tangible.data.AdbRepository
 import com.example.tangible.data.AppleMusicRepository
 import com.example.tangible.data.ChromecastDevice
@@ -1223,7 +1225,10 @@ fun TangibleApp(
         NavHost(
             navController = navController,
             startDestination = "collection",
-            modifier = Modifier.padding(innerPadding)
+            enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None }
         ) {
             composable("welcome_wizard") {
                 WelcomeWizardScreen(
@@ -1237,12 +1242,6 @@ fun TangibleApp(
                 MainScreen(
                     tags = savedTags,
                     selectedTagIds = selectedTagIds,
-                    musicSortField = musicSortField,
-                    musicSortOrder = musicSortOrder,
-                    movieSortField = movieSortField,
-                    movieSortOrder = movieSortOrder,
-                    onMusicSortChange = onMusicSortChange,
-                    onMovieSortChange = onMovieSortChange,
                     onPlay = onPlay,
                     onTagClick = { tagId ->
                         if (selectedTagIds.isNotEmpty()) {
@@ -1256,6 +1255,13 @@ fun TangibleApp(
                     onTagLongClick = { tagId ->
                         selectedTagIds = selectedTagIds + tagId
                     },
+                    modifier = Modifier.padding(innerPadding),
+                    musicSortField = musicSortField,
+                    musicSortOrder = musicSortOrder,
+                    movieSortField = movieSortField,
+                    movieSortOrder = movieSortOrder,
+                    onMusicSortChange = onMusicSortChange,
+                    onMovieSortChange = onMovieSortChange,
                     onUpdateTag = onUpdateTag,
                     onDeleteTag = { onDeleteTags(setOf(it)) },
                     sonosSpeakers = sonosSpeakers,
@@ -1291,7 +1297,8 @@ fun TangibleApp(
                     onMovieRegionClick = { navController.navigate("movie_region") },
                     onMovieProvidersClick = { navController.navigate("movie_providers") },
                     onExportClick = onExportClick,
-                    onImportClick = onImportClick
+                    onImportClick = onImportClick,
+                    modifier = Modifier.padding(innerPadding)
                 )
             }
             composable("music_service") {

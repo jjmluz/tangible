@@ -80,11 +80,12 @@ fun SettingsScreen(
     onMovieProvidersClick: () -> Unit,
     onExportClick: () -> Unit,
     onImportClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val regionName = REGIONS.find { it.first == selectedRegion }?.second ?: selectedRegion
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -185,8 +186,7 @@ fun MusicServiceScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground),
-                windowInsets = WindowInsets(0, 0, 0, 0)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground)
             )
         },
         containerColor = TangibleBackground
@@ -256,8 +256,7 @@ fun MusicSpeakerScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground),
-                windowInsets = WindowInsets(0, 0, 0, 0)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground)
             )
         },
         containerColor = TangibleBackground
@@ -371,8 +370,7 @@ fun MoviePlayerScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground),
-                windowInsets = WindowInsets(0, 0, 0, 0)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground)
             )
         },
         containerColor = TangibleBackground
@@ -466,8 +464,7 @@ fun MovieRegionScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground),
-                windowInsets = WindowInsets(0, 0, 0, 0)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground)
             )
         },
         containerColor = TangibleBackground

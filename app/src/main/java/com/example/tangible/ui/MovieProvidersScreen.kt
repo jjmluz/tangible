@@ -68,8 +68,7 @@ fun MovieProvidersScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground),
-                windowInsets = WindowInsets(0, 0, 0, 0)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground)
             )
         },
         containerColor = TangibleBackground
