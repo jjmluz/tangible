@@ -99,7 +99,11 @@ fun MainScreen(
                     SegmentedButton(
                         selected = selectedType == "MUSIC",
                         onClick = { selectedType = "MUSIC" },
-                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                        shape = SegmentedButtonDefaults.itemShape(
+                            index = 0,
+                            count = 2,
+                            baseShape = RoundedCornerShape(8.dp)
+                        ),
                         icon = { Icon(Icons.Default.MusicNote, contentDescription = null) }
                     ) {
                         Text("Music")
@@ -107,10 +111,14 @@ fun MainScreen(
                     SegmentedButton(
                         selected = selectedType == "MOVIE",
                         onClick = { selectedType = "MOVIE" },
-                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                        shape = SegmentedButtonDefaults.itemShape(
+                            index = 1,
+                            count = 2,
+                            baseShape = RoundedCornerShape(8.dp)
+                        ),
                         icon = { Icon(Icons.Default.Movie, contentDescription = null) }
                     ) {
-                        Text("Movie")
+                        Text("Movies")
                     }
                 }
 

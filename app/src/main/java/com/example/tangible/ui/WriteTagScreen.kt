@@ -316,7 +316,11 @@ private fun WriteTagSearchContent(
             SegmentedButton(
                 selected = tagType == TagType.MUSIC,
                 onClick = { onTagTypeChange(TagType.MUSIC) },
-                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                shape = SegmentedButtonDefaults.itemShape(
+                    index = 0,
+                    count = 2,
+                    baseShape = RoundedCornerShape(8.dp)
+                ),
                 icon = { Icon(Icons.Default.MusicNote, contentDescription = null) }
             ) {
                 Text("Music")
@@ -324,7 +328,11 @@ private fun WriteTagSearchContent(
             SegmentedButton(
                 selected = tagType == TagType.MOVIE,
                 onClick = { onTagTypeChange(TagType.MOVIE) },
-                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                shape = SegmentedButtonDefaults.itemShape(
+                    index = 1,
+                    count = 2,
+                    baseShape = RoundedCornerShape(8.dp)
+                ),
                 icon = { Icon(Icons.Default.Movie, contentDescription = null) }
             ) {
                 Text("Movie")
