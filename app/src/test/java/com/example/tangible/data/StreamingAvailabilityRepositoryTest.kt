@@ -59,4 +59,28 @@ class StreamingAvailabilityRepositoryTest {
         assertEquals("Stremio", result?.displayName)
         assertEquals("stremio://detail/movie/tt1234567", result?.url)
     }
+
+    @Test
+    fun `getServiceIdsFromTangibleUri parses services correctly`() {
+        val uri = "tangible://movie?tmdb_id=123&r=US&nf=s:456&pv=r:789"
+        val ids = StreamingAvailabilityRepository.getServiceIdsFromTangibleUri(uri)
+        assertEquals(setOf("netflix", "prime"), ids)
+    }
+
+    @Test
+    fun `getServiceIdsFromTangibleUri returns empty for non-movie uri`() {
+        val uri = "tangible://play?spotify_track=123"
+        val ids = StreamingAvailabilityRepository.getServiceIdsFromTangibleUri(uri)
+        assertEquals(emptySet<String>(), ids)
+    }
+
+    @Test
+    fun `getServiceDisplayNamesFromTangibleUri returns mapped names with types`() {
+        val uri = "tangible://movie?tmdb_id=123&r=US&nf=s:456&pv=r:789"
+        val names = StreamingAvailabilityRepository.getServiceDisplayNamesFromTangibleUri(uri)
+        assertEquals(
+            mapOf("netflix" to "Netflix (Subscription)", "prime" to "Prime Video (Rent)"),
+            names
+        )
+    }
 }

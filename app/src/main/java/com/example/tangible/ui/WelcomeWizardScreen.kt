@@ -124,16 +124,6 @@ fun WelcomeWizardScreen(
                 }
             }
         }
-
-        TextButton(
-            onClick = onDismiss,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(16.dp),
-            colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = 0.7f))
-        ) {
-            Text("SKIP")
-        }
     }
 }
 

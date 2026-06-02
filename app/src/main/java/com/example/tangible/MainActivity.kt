@@ -67,6 +67,7 @@ import com.example.tangible.data.YouTubeRepository
 import com.example.tangible.ui.MainScreen
 import com.example.tangible.ui.SortField
 import com.example.tangible.ui.SortOrder
+import com.example.tangible.ui.ViewMode
 import com.example.tangible.ui.MoviePlayerScreen
 import com.example.tangible.ui.MovieProvidersScreen
 import com.example.tangible.ui.MoviePlayer
@@ -150,6 +151,7 @@ class MainActivity : ComponentActivity() {
     private var musicSortOrder by mutableStateOf(SortOrder.ASCENDING)
     private var movieSortField by mutableStateOf(SortField.TITLE)
     private var movieSortOrder by mutableStateOf(SortOrder.ASCENDING)
+    private var collectionViewMode by mutableStateOf(ViewMode.LIST)
 
     // Repositories
     private val discogsToken = "REMOVED_SECRET"
@@ -234,6 +236,7 @@ class MainActivity : ComponentActivity() {
         musicSortOrder = SortOrder.valueOf(prefs.getString("music_sort_order", SortOrder.ASCENDING.name) ?: SortOrder.ASCENDING.name)
         movieSortField = SortField.valueOf(prefs.getString("movie_sort_field", SortField.TITLE.name) ?: SortField.TITLE.name)
         movieSortOrder = SortOrder.valueOf(prefs.getString("movie_sort_order", SortOrder.ASCENDING.name) ?: SortOrder.ASCENDING.name)
+        collectionViewMode = ViewMode.valueOf(prefs.getString("collection_view_mode", ViewMode.LIST.name) ?: ViewMode.LIST.name)
 
         loadMovieProviders()
         loadSonosSpeakers()
@@ -371,6 +374,7 @@ class MainActivity : ComponentActivity() {
                         musicSortOrder = musicSortOrder,
                         movieSortField = movieSortField,
                         movieSortOrder = movieSortOrder,
+                        viewMode = collectionViewMode,
                         onMusicSortChange = { field, order ->
                             musicSortField = field
                             musicSortOrder = order
@@ -386,6 +390,10 @@ class MainActivity : ComponentActivity() {
                                 .putString("movie_sort_field", field.name)
                                 .putString("movie_sort_order", order.name)
                                 .apply()
+                        },
+                        onViewModeChange = { mode ->
+                            collectionViewMode = mode
+                            prefs.edit().putString("collection_view_mode", mode.name).apply()
                         },
                         onExportClick = { exportLauncher.launch("tangible_backup.json") },
                         onImportClick = { importLauncher.launch(arrayOf("application/json")) }
@@ -1089,8 +1097,10 @@ fun TangibleApp(
     musicSortOrder: SortOrder,
     movieSortField: SortField,
     movieSortOrder: SortOrder,
+    viewMode: ViewMode,
     onMusicSortChange: (SortField, SortOrder) -> Unit,
     onMovieSortChange: (SortField, SortOrder) -> Unit,
+    onViewModeChange: (ViewMode) -> Unit,
     onExportClick: () -> Unit,
     onImportClick: () -> Unit
 ) {
@@ -1284,8 +1294,10 @@ fun TangibleApp(
                     musicSortOrder = musicSortOrder,
                     movieSortField = movieSortField,
                     movieSortOrder = movieSortOrder,
+                    viewMode = viewMode,
                     onMusicSortChange = onMusicSortChange,
                     onMovieSortChange = onMovieSortChange,
+                    onViewModeChange = onViewModeChange,
                     onUpdateTag = onUpdateTag,
                     onDeleteTag = { onDeleteTags(setOf(it)) },
                     sonosSpeakers = sonosSpeakers,

@@ -88,7 +88,7 @@ private val SERVICE_CONFIG_BY_KEY: Map<String, ServiceConfig> =
     SERVICE_CONFIGS.values.associateBy { it.shortKey }
 
 // Short-key → Provider ID (e.g., "nf" -> "netflix")
-private val PROVIDER_ID_BY_SHORT_KEY: Map<String, String> =
+val PROVIDER_ID_BY_SHORT_KEY: Map<String, String> =
     SERVICE_CONFIGS.entries.associate { it.value.shortKey to it.key }
 
 class StreamingAvailabilityRepository(private val rapidApiKey: String) {
@@ -247,6 +247,27 @@ class StreamingAvailabilityRepository(private val rapidApiKey: String) {
     }
 
     companion object {
+        fun getServiceIdsFromTangibleUri(uriString: String): Set<String> {
+            val uri = Uri.parse(uriString)
+            if (uri.scheme != "tangible" || uri.host != "movie") return emptySet()
+
+            return uri.queryParameterNames
+                .mapNotNull { PROVIDER_ID_BY_SHORT_KEY[it] }
+                .toSet()
+        }
+
+        fun getServiceDisplayNamesFromTangibleUri(uriString: String): Map<String, String> {
+            val uri = Uri.parse(uriString)
+            if (uri.scheme != "tangible" || uri.host != "movie") return emptyMap()
+
+            return uri.queryParameterNames.mapNotNull { key ->
+                val providerId = PROVIDER_ID_BY_SHORT_KEY[key] ?: return@mapNotNull null
+                val encodedValue = uri.getQueryParameter(key) ?: return@mapNotNull null
+                val resolved = resolveService(key, encodedValue) ?: return@mapNotNull null
+                providerId to resolved.displayName
+            }.toMap()
+        }
+
         // All known short keys in priority order — used when parsing a tag
         val ALL_SERVICE_KEYS: List<String> = SERVICE_PRIORITY.mapNotNull { id ->
             SERVICE_CONFIGS[id]?.shortKey

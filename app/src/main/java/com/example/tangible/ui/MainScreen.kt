@@ -6,9 +6,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -36,6 +41,11 @@ enum class SortOrder(val displayName: String) {
     DESCENDING("Descending")
 }
 
+enum class ViewMode {
+    LIST, GALLERY
+}
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MainScreen(
     tags: List<SavedTag>,
@@ -48,8 +58,10 @@ fun MainScreen(
     musicSortOrder: SortOrder = SortOrder.ASCENDING,
     movieSortField: SortField = SortField.TITLE,
     movieSortOrder: SortOrder = SortOrder.ASCENDING,
+    viewMode: ViewMode = ViewMode.LIST,
     onMusicSortChange: (SortField, SortOrder) -> Unit = { _, _ -> },
     onMovieSortChange: (SortField, SortOrder) -> Unit = { _, _ -> },
+    onViewModeChange: (ViewMode) -> Unit = {},
     onUpdateTag: (SavedTag) -> Unit = {},
     onDeleteTag: (String) -> Unit = {},
     sonosSpeakers: List<com.example.tangible.data.SonosSpeaker> = emptyList(),
@@ -107,20 +119,42 @@ fun MainScreen(
                 )
             }
         } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = 72.dp, bottom = 112.dp)
-            ) {
-                items(filteredTags, key = { it.id }) { tag ->
-                    TagRow(
-                        tag = tag,
-                        isSelected = tag.id in selectedTagIds,
-                        isSelectionMode = selectedTagIds.isNotEmpty(),
-                        onPlay = { onPlay(tag) },
-                        onEdit = { tagToEdit = tag },
-                        onTagClick = { onTagClick(tag.id) },
-                        onTagLongClick = { onTagLongClick(tag.id) }
-                    )
+            if (viewMode == ViewMode.LIST) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(top = 72.dp, bottom = 112.dp)
+                ) {
+                    items(filteredTags, key = { it.id }) { tag ->
+                        TagRow(
+                            tag = tag,
+                            isSelected = tag.id in selectedTagIds,
+                            isSelectionMode = selectedTagIds.isNotEmpty(),
+                            onPlay = { onPlay(tag) },
+                            onEdit = { tagToEdit = tag },
+                            onTagClick = { onTagClick(tag.id) },
+                            onTagLongClick = { onTagLongClick(tag.id) }
+                        )
+                    }
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(3),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(top = 72.dp, bottom = 112.dp, start = 8.dp, end = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(filteredTags, key = { it.id }) { tag ->
+                        TagGridItem(
+                            tag = tag,
+                            isSelected = tag.id in selectedTagIds,
+                            isSelectionMode = selectedTagIds.isNotEmpty(),
+                            onPlay = { onPlay(tag) },
+                            onEdit = { tagToEdit = tag },
+                            onTagClick = { onTagClick(tag.id) },
+                            onTagLongClick = { onTagLongClick(tag.id) }
+                        )
+                    }
                 }
             }
         }
@@ -165,6 +199,18 @@ fun MainScreen(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
+                    IconButton(
+                        onClick = {
+                            onViewModeChange(if (viewMode == ViewMode.LIST) ViewMode.GALLERY else ViewMode.LIST)
+                        }
+                    ) {
+                        Icon(
+                            imageVector = if (viewMode == ViewMode.LIST) Icons.AutoMirrored.Filled.List else Icons.Default.GridView,
+                            contentDescription = "Switch View Mode",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
                     SortMenu(
                         selectedType = selectedType,
                         currentField = currentSortField,
@@ -193,7 +239,7 @@ fun MainScreen(
 }
 
 @Composable
-private fun SortMenu(
+fun SortMenu(
     selectedType: String,
     currentField: SortField,
     currentOrder: SortOrder,
@@ -204,9 +250,9 @@ private fun SortMenu(
     Box {
         IconButton(onClick = { expanded = true }) {
             Icon(
-                imageVector = Icons.Default.Sort,
+                imageVector = Icons.AutoMirrored.Filled.Sort,
                 contentDescription = "Sort",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = MaterialTheme.colorScheme.onSurface
             )
         }
 
@@ -216,53 +262,45 @@ private fun SortMenu(
         ) {
             Text(
                 text = "Sort by",
-                style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.labelLarge,
                 color = TangiblePurple
             )
-
+            
             SortField.entries.forEach { field ->
-                val displayName = when (field) {
-                    SortField.SUBTITLE -> if (selectedType == "MUSIC") "Artist" else "Year"
-                    else -> field.displayName
-                }
                 DropdownMenuItem(
                     text = {
-                        Text(
-                            text = displayName,
-                            fontWeight = if (currentField == field) FontWeight.Bold else FontWeight.Normal
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(if (field == SortField.SUBTITLE) (if (selectedType == "MUSIC") "Artist" else "Year") else field.displayName)
+                            if (currentField == field) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                            }
+                        }
                     },
                     onClick = {
                         onSortChange(field, currentOrder)
                         expanded = false
-                    },
-                    trailingIcon = {
-                        if (currentField == field) {
-                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                        }
                     }
                 )
             }
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            HorizontalDivider()
 
             SortOrder.entries.forEach { order ->
                 DropdownMenuItem(
                     text = {
-                        Text(
-                            text = order.displayName,
-                            fontWeight = if (currentOrder == order) FontWeight.Bold else FontWeight.Normal
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(order.displayName)
+                            if (currentOrder == order) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                            }
+                        }
                     },
                     onClick = {
                         onSortChange(currentField, order)
                         expanded = false
-                    },
-                    trailingIcon = {
-                        if (currentOrder == order) {
-                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                        }
                     }
                 )
             }
@@ -270,6 +308,7 @@ private fun SortMenu(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TagDetailsModal(
     tag: SavedTag,
@@ -280,60 +319,62 @@ fun TagDetailsModal(
     chromecastDevices: List<com.example.tangible.data.ChromecastDevice>,
     movieProviders: List<com.example.tangible.data.MovieProvider>
 ) {
-    val isTangibleUri = tag.url.startsWith("tangible://")
-    
-    // Parse available services if it's a Tangible URI
-    val availableServices = remember(tag, movieProviders) {
-        if (!isTangibleUri) return@remember emptyList<Pair<String, String>>()
-        val uri = Uri.parse(tag.url)
-        if (tag.type == "MUSIC") {
-            buildList {
-                if (uri.getQueryParameter("spotify_track") != null || uri.getQueryParameter("spotify_album") != null) {
-                    add("SPOTIFY" to "Spotify")
-                }
-                if (uri.getQueryParameter("ytm") != null) {
-                    add("YOUTUBE_MUSIC" to "YouTube Music")
-                }
-                if (uri.getQueryParameter("apple_music") != null) {
-                    add("APPLE_MUSIC" to "Apple Music")
-                }
-            }
-        } else {
-            // For movies
-            val enabledIds = movieProviders.filter { it.isEnabled }.map { it.id }
-            com.example.tangible.data.StreamingAvailabilityRepository.ALL_SERVICE_KEYS.mapNotNull { key ->
-                val encoded = uri.getQueryParameter(key) ?: return@mapNotNull null
-                val providerId = com.example.tangible.data.StreamingAvailabilityRepository.getProviderId(key) ?: return@mapNotNull null
-                if (providerId !in enabledIds) return@mapNotNull null
-                val resolved = com.example.tangible.data.StreamingAvailabilityRepository.resolveService(key, encoded) ?: return@mapNotNull null
-                key to resolved.displayName
-            }
-        }
-    }
-
     var selectedService by remember { mutableStateOf(tag.customService ?: "DEFAULT") }
     var selectedOutputId by remember { mutableStateOf(tag.customOutputId ?: "DEFAULT") }
+    val isTangibleUri = tag.url.startsWith("tangible://")
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(tag.title) },
+        title = { Text("Edit Tag") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                // Streaming Service Dropdown
+                // Info
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (tag.imageUrl != null) {
+                            AsyncImage(
+                                model = tag.imageUrl,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Text(if (tag.type == "MUSIC") "♪" else "▶", style = MaterialTheme.typography.headlineSmall)
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text(tag.title, style = MaterialTheme.typography.titleMedium)
+                        Text(tag.subtitle, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+
+                // Service Dropdown
                 DetailDropdown(
-                    label = "Streaming service",
+                    label = "Service",
                     selectedId = selectedService,
                     onSelectedChange = { selectedService = it },
                     options = buildList {
                         if (isTangibleUri) {
                             add("DEFAULT" to "Default")
-                            availableServices.forEach { (id, name) ->
-                                add(id to name)
+                            if (tag.type == "MUSIC") {
+                                add("SPOTIFY" to "Spotify")
+                                add("YOUTUBE_MUSIC" to "YouTube Music")
+                                add("APPLE_MUSIC" to "Apple Music")
+                            } else {
+                                val serviceDisplayNames = com.example.tangible.data.StreamingAvailabilityRepository.getServiceDisplayNamesFromTangibleUri(tag.url)
+                                movieProviders
+                                    .filter { it.isEnabled && it.id in serviceDisplayNames }
+                                    .forEach { add("MOVIE_PROVIDER:${it.id}" to (serviceDisplayNames[it.id] ?: it.name)) }
                             }
                         } else {
-                            // Direct link
                             val serviceName = when {
-                                tag.url.contains("spotify.com") || tag.url.contains("spotify:") -> "Spotify"
+                                tag.url.contains("spotify.com") -> "Spotify"
                                 tag.url.contains("youtube.com") || tag.url.contains("music.youtube.com") -> "YouTube Music"
                                 tag.url.contains("apple.com") -> "Apple Music"
                                 else -> "Direct Link"
@@ -438,6 +479,7 @@ private fun DetailDropdown(
         }
     }
 }
+
 @Composable
 private fun TagRow(
     tag: SavedTag,
@@ -459,7 +501,6 @@ private fun TagRow(
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // ... (Cover art remains the same)
         // Cover art
         Box(
             modifier = Modifier
@@ -537,12 +578,122 @@ private fun TagRow(
                 )
             }
         } else {
-            // Optional: show a checkbox or just rely on the background color
             Checkbox(
                 checked = isSelected,
                 onCheckedChange = { onTagClick() },
                 colors = CheckboxDefaults.colors(checkedColor = TangiblePurple)
             )
         }
+    }
+}
+
+@Composable
+private fun TagGridItem(
+    tag: SavedTag,
+    isSelected: Boolean,
+    isSelectionMode: Boolean,
+    onPlay: () -> Unit,
+    onEdit: () -> Unit,
+    onTagClick: () -> Unit,
+    onTagLongClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .combinedClickable(
+                onClick = { if (isSelectionMode) onTagClick() else onEdit() },
+                onLongClick = onTagLongClick
+            )
+            .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else Color.Transparent)
+            .padding(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Cover art
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f),
+            contentAlignment = Alignment.Center
+        ) {
+            val imageModifier = if (tag.type == "MOVIE") {
+                Modifier
+                    .fillMaxHeight()
+                    .aspectRatio(2f / 3f)
+            } else {
+                Modifier.fillMaxSize()
+            }
+            Box(
+                modifier = imageModifier.clip(RoundedCornerShape(4.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (tag.imageUrl != null) {
+                    AsyncImage(
+                        model = tag.imageUrl,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = if (tag.type == "MUSIC") "♪" else "▶",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Play button overlay
+            if (!isSelectionMode) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(4.dp),
+                    contentAlignment = Alignment.BottomEnd
+                ) {
+                    Surface(
+                        onClick = onPlay,
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "Play",
+                                tint = TangiblePurple,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = tag.title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
+        Text(
+            text = tag.subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
     }
 }
