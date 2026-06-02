@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -52,7 +53,8 @@ fun MainScreen(
     onUpdateTag: (SavedTag) -> Unit = {},
     onDeleteTag: (String) -> Unit = {},
     sonosSpeakers: List<com.example.tangible.data.SonosSpeaker> = emptyList(),
-    chromecastDevices: List<com.example.tangible.data.ChromecastDevice> = emptyList()
+    chromecastDevices: List<com.example.tangible.data.ChromecastDevice> = emptyList(),
+    movieProviders: List<com.example.tangible.data.MovieProvider> = emptyList()
 ) {
     var selectedType by remember { mutableStateOf("MUSIC") }
     var tagToEdit by remember { mutableStateOf<SavedTag?>(null) }
@@ -82,64 +84,15 @@ fun MainScreen(
                 tagToEdit = null
             },
             sonosSpeakers = sonosSpeakers,
-            chromecastDevices = chromecastDevices
+            chromecastDevices = chromecastDevices,
+            movieProviders = movieProviders
         )
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
-        if (tags.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                SingleChoiceSegmentedButtonRow(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    SegmentedButton(
-                        selected = selectedType == "MUSIC",
-                        onClick = { selectedType = "MUSIC" },
-                        shape = SegmentedButtonDefaults.itemShape(
-                            index = 0,
-                            count = 2,
-                            baseShape = RoundedCornerShape(8.dp)
-                        ),
-                        icon = { Icon(Icons.Default.MusicNote, contentDescription = null) }
-                    ) {
-                        Text("Music")
-                    }
-                    SegmentedButton(
-                        selected = selectedType == "MOVIE",
-                        onClick = { selectedType = "MOVIE" },
-                        shape = SegmentedButtonDefaults.itemShape(
-                            index = 1,
-                            count = 2,
-                            baseShape = RoundedCornerShape(8.dp)
-                        ),
-                        icon = { Icon(Icons.Default.Movie, contentDescription = null) }
-                    ) {
-                        Text("Movies")
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                SortMenu(
-                    selectedType = selectedType,
-                    currentField = currentSortField,
-                    currentOrder = currentSortOrder,
-                    onSortChange = { field, order ->
-                        if (selectedType == "MUSIC") onMusicSortChange(field, order)
-                        else onMovieSortChange(field, order)
-                    }
-                )
-            }
-        }
-
+    Box(modifier = modifier.fillMaxSize()) {
         if (filteredTags.isEmpty()) {
             Box(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -155,8 +108,8 @@ fun MainScreen(
             }
         } else {
             LazyColumn(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentPadding = PaddingValues(bottom = 12.dp)
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(top = 72.dp, bottom = 112.dp)
             ) {
                 items(filteredTags, key = { it.id }) { tag ->
                     TagRow(
@@ -169,6 +122,71 @@ fun MainScreen(
                         onTagLongClick = { onTagLongClick(tag.id) }
                     )
                 }
+            }
+        }
+
+        if (tags.isNotEmpty()) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(TangibleBackground)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SingleChoiceSegmentedButtonRow(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        SegmentedButton(
+                            selected = selectedType == "MUSIC",
+                            onClick = { selectedType = "MUSIC" },
+                            shape = SegmentedButtonDefaults.itemShape(
+                                index = 0,
+                                count = 2,
+                                baseShape = RoundedCornerShape(8.dp)
+                            ),
+                            icon = { Icon(Icons.Default.MusicNote, contentDescription = null) }
+                        ) {
+                            Text("Music")
+                        }
+                        SegmentedButton(
+                            selected = selectedType == "MOVIE",
+                            onClick = { selectedType = "MOVIE" },
+                            shape = SegmentedButtonDefaults.itemShape(
+                                index = 1,
+                                count = 2,
+                                baseShape = RoundedCornerShape(8.dp)
+                            ),
+                            icon = { Icon(Icons.Default.Movie, contentDescription = null) }
+                        ) {
+                            Text("Movies")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    SortMenu(
+                        selectedType = selectedType,
+                        currentField = currentSortField,
+                        currentOrder = currentSortOrder,
+                        onSortChange = { field, order ->
+                            if (selectedType == "MUSIC") onMusicSortChange(field, order)
+                            else onMovieSortChange(field, order)
+                        }
+                    )
+                }
+                
+                // Top gradient bar
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(16.dp)
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(TangibleBackground, Color.Transparent)
+                            )
+                        )
+                )
             }
         }
     }
@@ -259,23 +277,37 @@ fun TagDetailsModal(
     onUpdate: (SavedTag) -> Unit,
     onDelete: () -> Unit,
     sonosSpeakers: List<com.example.tangible.data.SonosSpeaker>,
-    chromecastDevices: List<com.example.tangible.data.ChromecastDevice>
+    chromecastDevices: List<com.example.tangible.data.ChromecastDevice>,
+    movieProviders: List<com.example.tangible.data.MovieProvider>
 ) {
     val isTangibleUri = tag.url.startsWith("tangible://")
     
     // Parse available services if it's a Tangible URI
-    val availableServices = remember(tag) {
-        if (!isTangibleUri) return@remember emptyList<String>()
+    val availableServices = remember(tag, movieProviders) {
+        if (!isTangibleUri) return@remember emptyList<Pair<String, String>>()
         val uri = Uri.parse(tag.url)
         if (tag.type == "MUSIC") {
             buildList {
-                if (uri.getQueryParameter("spotify_track") != null || uri.getQueryParameter("spotify_album") != null) add("SPOTIFY")
-                if (uri.getQueryParameter("ytm") != null) add("YOUTUBE_MUSIC")
-                if (uri.getQueryParameter("apple_music") != null) add("APPLE_MUSIC")
+                if (uri.getQueryParameter("spotify_track") != null || uri.getQueryParameter("spotify_album") != null) {
+                    add("SPOTIFY" to "Spotify")
+                }
+                if (uri.getQueryParameter("ytm") != null) {
+                    add("YOUTUBE_MUSIC" to "YouTube Music")
+                }
+                if (uri.getQueryParameter("apple_music") != null) {
+                    add("APPLE_MUSIC" to "Apple Music")
+                }
             }
         } else {
-            // For movies, we can show the provider names or just "Auto-resolve"
-            listOf("AUTO")
+            // For movies
+            val enabledIds = movieProviders.filter { it.isEnabled }.map { it.id }
+            com.example.tangible.data.StreamingAvailabilityRepository.ALL_SERVICE_KEYS.mapNotNull { key ->
+                val encoded = uri.getQueryParameter(key) ?: return@mapNotNull null
+                val providerId = com.example.tangible.data.StreamingAvailabilityRepository.getProviderId(key) ?: return@mapNotNull null
+                if (providerId !in enabledIds) return@mapNotNull null
+                val resolved = com.example.tangible.data.StreamingAvailabilityRepository.resolveService(key, encoded) ?: return@mapNotNull null
+                key to resolved.displayName
+            }
         }
     }
 
@@ -293,26 +325,16 @@ fun TagDetailsModal(
                     selectedId = selectedService,
                     onSelectedChange = { selectedService = it },
                     options = buildList {
-                        add("DEFAULT" to "Default")
                         if (isTangibleUri) {
-                            if (tag.type == "MUSIC") {
-                                availableServices.forEach { s ->
-                                    val name = when(s) {
-                                        "SPOTIFY" -> "Spotify"
-                                        "YOUTUBE_MUSIC" -> "YouTube Music"
-                                        "APPLE_MUSIC" -> "Apple Music"
-                                        else -> s
-                                    }
-                                    add(s to name)
-                                }
-                            } else {
-                                add("AUTO" to "Auto-resolve")
+                            add("DEFAULT" to "Default")
+                            availableServices.forEach { (id, name) ->
+                                add(id to name)
                             }
                         } else {
                             // Direct link
                             val serviceName = when {
-                                tag.url.contains("spotify.com") -> "Spotify"
-                                tag.url.contains("youtube.com") -> "YouTube Music"
+                                tag.url.contains("spotify.com") || tag.url.contains("spotify:") -> "Spotify"
+                                tag.url.contains("youtube.com") || tag.url.contains("music.youtube.com") -> "YouTube Music"
                                 tag.url.contains("apple.com") -> "Apple Music"
                                 else -> "Direct Link"
                             }
@@ -328,8 +350,8 @@ fun TagDetailsModal(
                     selectedId = selectedOutputId,
                     onSelectedChange = { selectedOutputId = it },
                     options = buildList {
-                        add("DEFAULT" to "Default")
                         if (isTangibleUri) {
+                            add("DEFAULT" to "Default")
                             add("THIS_DEVICE" to "This device")
                             if (tag.type == "MUSIC") {
                                 add("SONOS_ALL" to "Sonos: All speakers")

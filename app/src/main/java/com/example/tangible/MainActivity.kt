@@ -45,6 +45,8 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Brush
 import com.example.tangible.data.AdbRepository
 import com.example.tangible.data.AppleMusicRepository
 import com.example.tangible.data.ChromecastDevice
@@ -607,7 +609,11 @@ class MainActivity : ComponentActivity() {
                         val resolved = StreamingAvailabilityRepository.resolveService(key, encoded) ?: return@mapNotNull null
                         Triple(key, providerId, resolved)
                     }
-                movieToPlay = if (movieProviders.isNotEmpty()) {
+
+                val customServiceKey = savedTag?.customService
+                movieToPlay = if (customServiceKey != null) {
+                    candidates.find { it.first == customServiceKey }?.third?.url
+                } else if (movieProviders.isNotEmpty()) {
                     val enabledIds = enabledProviders.map { it.id }
                     candidates
                         .filter { it.second in enabledIds }
@@ -1091,7 +1097,6 @@ fun TangibleApp(
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
-    val showChrome = currentRoute == "collection" || currentRoute == "settings"
 
     LaunchedEffect(Unit) {
         if (!hasShownWelcomeWizard) {
@@ -1104,8 +1109,27 @@ fun TangibleApp(
     var selectedTagIds by remember { mutableStateOf(setOf<String>()) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
+    val showChrome = currentRoute == "collection" || currentRoute == "settings"
+    var chromeVisible by remember { mutableStateOf(showChrome) }
+    var lastChromeRoute by remember { mutableStateOf("collection") }
+
+    LaunchedEffect(showChrome) {
+        if (showChrome) {
+            chromeVisible = true
+            lastChromeRoute = currentRoute ?: "collection"
+        } else {
+            // Delay disappearance slightly to ensure the next screen has rendered
+            // its first frame, avoiding a flicker of the content behind the bars.
+            delay(50)
+            chromeVisible = false
+        }
+    }
+
     // Clear selection when navigating away from collection
     LaunchedEffect(currentRoute) {
+        if (showChrome) {
+            lastChromeRoute = currentRoute ?: "collection"
+        }
         if (currentRoute != "collection") {
             selectedTagIds = emptySet()
         }
@@ -1113,10 +1137,10 @@ fun TangibleApp(
 
     Scaffold(
         topBar = {
-            if (showChrome) {
+            if (chromeVisible) {
                 TopAppBar(
                     title = {
-                        if (currentRoute == "collection") {
+                        if (lastChromeRoute == "collection") {
                             if (selectedTagIds.isNotEmpty()) {
                                 Text(
                                     text = "${selectedTagIds.size} selected",
@@ -1175,9 +1199,9 @@ fun TangibleApp(
             }
         },
         bottomBar = {
-            if (showChrome) {
+            if (chromeVisible) {
                 TangibleBottomBar(
-                    currentRoute = currentRoute,
+                    currentRoute = lastChromeRoute,
                     onCollectionClick = {
                         navController.navigate("collection") {
                             popUpTo("collection") { inclusive = false }
@@ -1255,7 +1279,7 @@ fun TangibleApp(
                     onTagLongClick = { tagId ->
                         selectedTagIds = selectedTagIds + tagId
                     },
-                    modifier = Modifier.padding(innerPadding),
+                    modifier = Modifier.padding(top = innerPadding.calculateTopPadding()),
                     musicSortField = musicSortField,
                     musicSortOrder = musicSortOrder,
                     movieSortField = movieSortField,
@@ -1265,7 +1289,8 @@ fun TangibleApp(
                     onUpdateTag = onUpdateTag,
                     onDeleteTag = { onDeleteTags(setOf(it)) },
                     sonosSpeakers = sonosSpeakers,
-                    chromecastDevices = chromecastDevices
+                    chromecastDevices = chromecastDevices,
+                    movieProviders = movieProviders
                 )
             }
             composable("write_tag") {
@@ -1298,7 +1323,11 @@ fun TangibleApp(
                     onMovieProvidersClick = { navController.navigate("movie_providers") },
                     onExportClick = onExportClick,
                     onImportClick = onImportClick,
-                    modifier = Modifier.padding(innerPadding)
+                    modifier = Modifier.padding(top = innerPadding.calculateTopPadding()),
+                    sonosSpeakers = sonosSpeakers,
+                    selectedSonosIp = selectedSonosIp,
+                    chromecastDevices = chromecastDevices,
+                    selectedChromecastId = selectedChromecastId
                 )
             }
             composable("music_service") {
@@ -1370,36 +1399,67 @@ private fun TangibleBottomBar(
             .fillMaxWidth()
             .height(96.dp)
     ) {
-        Surface(
+        // Left gradient bar
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.5f)
+                .height(96.dp)
+                .align(Alignment.BottomStart)
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, TangibleBackground),
+                        endY = 120f
+                    )
+                )
+        )
+
+        // Right gradient bar
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.5f)
+                .height(96.dp)
+                .align(Alignment.BottomEnd)
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, TangibleBackground),
+                        endY = 120f
+                    )
+                )
+        )
+
+        // Solid background for the bottom part of the bar
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(72.dp)
-                .align(Alignment.BottomCenter),
-            color = TangibleSurface,
-            shadowElevation = 8.dp
+                .align(Alignment.BottomCenter)
+                .background(TangibleBackground)
+        )
+
+        // Navigation items
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(72.dp)
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                BottomNavItem(
-                    icon = Icons.Default.VideoLibrary,
-                    label = "Collection",
-                    selected = currentRoute == "collection",
-                    onClick = onCollectionClick,
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                BottomNavItem(
-                    icon = Icons.Default.Settings,
-                    label = "Settings",
-                    selected = currentRoute == "settings",
-                    onClick = onSettingsClick,
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            BottomNavItem(
+                icon = Icons.Default.VideoLibrary,
+                label = "Collection",
+                selected = currentRoute == "collection",
+                onClick = onCollectionClick,
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            BottomNavItem(
+                icon = Icons.Default.Settings,
+                label = "Settings",
+                selected = currentRoute == "settings",
+                onClick = onSettingsClick,
+                modifier = Modifier.weight(1f)
+            )
         }
 
         FloatingActionButton(

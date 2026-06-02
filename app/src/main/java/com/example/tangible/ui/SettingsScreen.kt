@@ -81,20 +81,43 @@ fun SettingsScreen(
     onExportClick: () -> Unit,
     onImportClick: () -> Unit,
     modifier: Modifier = Modifier,
+    sonosSpeakers: List<SonosSpeaker> = emptyList(),
+    selectedSonosIp: String? = null,
+    chromecastDevices: List<ChromecastDevice> = emptyList(),
+    selectedChromecastId: String? = null,
 ) {
     val regionName = REGIONS.find { it.first == selectedRegion }?.second ?: selectedRegion
+
+    val musicSpeakerSubtitle = when (selectedSpeaker) {
+        MusicSpeaker.SONOS -> {
+            if (selectedSonosIp == SONOS_ALL_SPEAKERS) "Sonos: All speakers"
+            else sonosSpeakers.find { it.ip == selectedSonosIp }?.let { "Sonos: ${it.name}" } ?: selectedSpeaker.displayName
+        }
+        MusicSpeaker.CHROMECAST -> {
+            chromecastDevices.find { it.id == selectedChromecastId }?.let { "Google TV: ${it.name}" } ?: selectedSpeaker.displayName
+        }
+        else -> selectedSpeaker.displayName
+    }
+
+    val moviePlayerSubtitle = when (selectedMoviePlayer) {
+        MoviePlayer.GOOGLE_TV -> {
+            chromecastDevices.find { it.id == selectedChromecastId }?.let { "Google TV: ${it.name}" } ?: selectedMoviePlayer.displayName
+        }
+        else -> selectedMoviePlayer.displayName
+    }
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 16.dp)
+            .padding(top = 8.dp, bottom = 112.dp)
     ) {
         SectionHeader("Music")
         Spacer(Modifier.height(8.dp))
         SettingsItem("Streaming service", selectedService.displayName, onMusicServiceClick)
         Spacer(Modifier.height(8.dp))
-        SettingsItem("Default output", selectedSpeaker.displayName, onMusicSpeakerClick)
+        SettingsItem("Default output", musicSpeakerSubtitle, onMusicSpeakerClick)
 
         Spacer(Modifier.height(24.dp))
 
@@ -102,7 +125,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(8.dp))
         SettingsItem("Streaming services", "Manage enabled services", onMovieProvidersClick)
         Spacer(Modifier.height(8.dp))
-        SettingsItem("Default output", selectedMoviePlayer.displayName, onMoviePlayerClick)
+        SettingsItem("Default output", moviePlayerSubtitle, onMoviePlayerClick)
         Spacer(Modifier.height(8.dp))
         SettingsItem("Region", regionName, onMovieRegionClick)
 
