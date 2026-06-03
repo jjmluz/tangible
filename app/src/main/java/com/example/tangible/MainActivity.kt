@@ -309,12 +309,14 @@ class MainActivity : ComponentActivity() {
                             prefs.edit().putString("selected_movie_player", it.name).apply()
                         },
                         onStartWriting = { info ->
+                            Log.d("Tangible", "onStartWriting: url=${info.url}")
                             dataToWrite = info.url
                             pendingTagInfo = info
                             isWritingMode = true
                             writeError = null
                         },
                         onCancelWriting = {
+                            Log.d("Tangible", "onCancelWriting")
                             isWritingMode = false
                             dataToWrite = null
                             writeError = null
@@ -569,20 +571,17 @@ class MainActivity : ComponentActivity() {
         // Find saved tag for custom settings if not provided
         val savedTag = customTag ?: savedTags.find { it.url == dataString }
 
-        if (isWritingMode && (
-                NfcAdapter.ACTION_TAG_DISCOVERED == action ||
-                NfcAdapter.ACTION_NDEF_DISCOVERED == action ||
-                NfcAdapter.ACTION_TECH_DISCOVERED == action
-            )) {
-            val tag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (isWritingMode) {
+            val tag: Tag? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 intent.getParcelableExtra(NfcAdapter.EXTRA_TAG, Tag::class.java)
             } else {
                 @Suppress("DEPRECATION")
                 intent.getParcelableExtra(NfcAdapter.EXTRA_TAG)
             }
-            if (tag != null) writeToTag(tag, dataToWrite ?: "")
-            else Log.e("Tangible", "NFC Tag extra is null")
-            return
+            if (tag != null) {
+                writeToTag(tag, dataToWrite ?: "")
+                return
+            }
         }
 
         var uris = TagMediaUris()
