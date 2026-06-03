@@ -110,8 +110,8 @@ data class SavedTag(
 const val SONOS_ALL_SPEAKERS = "ALL_SPEAKERS"
 
 private val STREAMING_PACKAGES = mapOf(
-    "netflix.com" to "com.netflix.mediaclient",
-    "primevideo.com" to "com.amazon.avod.thirdpartyclient",
+    "netflix.com" to "com.netflix.ninja",
+    "primevideo.com" to "com.amazon.amazonvideo.livingroom",
     "disneyplus.com" to "com.disney.disneyplus",
     "play.max.com" to "com.wbd.stream",
     "tv.apple.com" to "com.apple.atve.androidtv.appletv",
@@ -758,11 +758,31 @@ class MainActivity : ComponentActivity() {
         } else {
             val urlHost = uri.host?.lowercase() ?: ""
             packageName = STREAMING_PACKAGES.entries.firstOrNull { urlHost.endsWith(it.key) }?.value ?: ""
+            
+            // For Prime Video, try the ASIN directly first as GTI might cause error 9345 on some TV versions
+            val asin = if (urlHost.contains("primevideo.com")) {
+                uri.getQueryParameter("asin") ?: uri.lastPathSegment?.takeIf { it.matches(Regex("[A-Z0-9]{10,}")) }
+            } else null
+            
+            if (asin != null) {
+                lifecycleScope.launch {
+                    val tvAsinUrl = "https://app.primevideo.com/detail?asin=$asin"
+                    val ok = adbRepository.launchUri(host, tvAsinUrl, packageName, forceStop = true)
+                    if (!ok) {
+                        // Fallback to GTI if direct ASIN fails
+                        val resolved = StreamingAvailabilityRepository.resolveGtiUrl(asin) ?: url
+                        adbRepository.launchUri(host, resolved, packageName, forceStop = true)
+                    }
+                }
+                return
+            }
             tvUrl = url
         }
         lifecycleScope.launch {
             Toast.makeText(this@MainActivity, "Opening movie on TV…", Toast.LENGTH_SHORT).show()
-            val ok = adbRepository.launchUri(host, tvUrl, packageName)
+            val extras = if (packageName == "com.netflix.ninja") mapOf("source" to "30") else emptyMap()
+            val component = if (packageName == "com.netflix.ninja") "com.netflix.ninja/.MainActivity" else ""
+            val ok = adbRepository.launchUri(host, tvUrl, packageName, extras, component, forceStop = true)
             if (!ok) {
                 Toast.makeText(
                     this@MainActivity,
@@ -776,8 +796,11 @@ class MainActivity : ComponentActivity() {
     private fun playMovie(url: String) {
         val parsed = Uri.parse(url)
         val asin = if (parsed.host == "app.primevideo.com") {
+            // URL is either https://app.primevideo.com/detail?asin=... or https://app.primevideo.com/detail/ASIN
             parsed.getQueryParameter("asin")
                 ?: parsed.lastPathSegment?.takeIf { it.matches(Regex("[A-Z0-9]{10,}")) }
+        } else if (parsed.host == "www.primevideo.com" || parsed.host == "primevideo.com") {
+            parsed.lastPathSegment?.takeIf { it.matches(Regex("[A-Z0-9]{10,}")) }
         } else null
         Log.d("Tangible", "playMovie: url=$url asin=$asin")
         if (asin != null) {

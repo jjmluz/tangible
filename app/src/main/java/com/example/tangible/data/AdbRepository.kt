@@ -20,17 +20,36 @@ class AdbRepository(private val context: Context) {
         return AdbKeyPair.read(privateKeyFile, publicKeyFile)
     }
 
-    suspend fun launchUri(host: String, uri: String, packageName: String = ""): Boolean =
+    suspend fun launchUri(
+        host: String,
+        uri: String,
+        packageName: String = "",
+        extras: Map<String, String> = emptyMap(),
+        componentName: String = "",
+        forceStop: Boolean = false
+    ): Boolean =
         withContext(Dispatchers.IO) {
             var dadb: Dadb? = null
             try {
                 val keyPair = getOrCreateKeyPair()
                 dadb = Dadb.create(host, 5555, keyPair)
-                val escaped = uri.replace("'", "'\\''")
-                val cmd = if (packageName.isNotBlank())
-                    "am start -a android.intent.action.VIEW -d '$escaped' $packageName"
-                else
-                    "am start -a android.intent.action.VIEW -d '$escaped'"
+                val escapedUri = uri.replace("'", "'\\''")
+                val sb = StringBuilder("am start")
+                if (forceStop) sb.append(" -S")
+
+                if (componentName.isNotBlank()) {
+                    sb.append(" -n ").append(componentName)
+                } else if (packageName.isNotBlank()) {
+                    sb.append(" -p ").append(packageName)
+                }
+                sb.append(" -a android.intent.action.VIEW")
+                sb.append(" -d '").append(escapedUri).append("'")
+                
+                extras.forEach { (key, value) ->
+                    sb.append(" --es \"").append(key).append("\" \"").append(value).append("\"")
+                }
+
+                val cmd = sb.toString()
                 val result = dadb.shell(cmd)
                 val output = result.allOutput
                 Log.d(TAG, "am start exit=${result.exitCode} output=$output")
