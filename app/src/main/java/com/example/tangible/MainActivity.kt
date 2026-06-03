@@ -396,19 +396,10 @@ class MainActivity : ComponentActivity() {
                             prefs.edit().putString("collection_view_mode", mode.name).apply()
                         },
                         onExportClick = { exportLauncher.launch("tangible_backup.json") },
-                        onImportClick = { importLauncher.launch(arrayOf("application/json")) }
+                        onImportClick = { importLauncher.launch(arrayOf("application/json")) },
+                        showSuccessDialog = showSuccessDialog,
+                        onSuccessDismissed = { showSuccessDialog = false }
                     )
-
-                    if (showSuccessDialog) {
-                        AlertDialog(
-                            onDismissRequest = { showSuccessDialog = false },
-                            title = { Text("Success") },
-                            text = { Text("Deep link successfully written to tag!") },
-                            confirmButton = {
-                                TextButton(onClick = { showSuccessDialog = false }) { Text("OK") }
-                            }
-                        )
-                    }
                 }
             }
         }
@@ -1102,11 +1093,30 @@ fun TangibleApp(
     onMovieSortChange: (SortField, SortOrder) -> Unit,
     onViewModeChange: (ViewMode) -> Unit,
     onExportClick: () -> Unit,
-    onImportClick: () -> Unit
+    onImportClick: () -> Unit,
+    showSuccessDialog: Boolean,
+    onSuccessDismissed: () -> Unit
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    if (showSuccessDialog) {
+        AlertDialog(
+            onDismissRequest = onSuccessDismissed,
+            title = { Text("Success") },
+            text = { Text("Media link successfully written to tag!") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onSuccessDismissed()
+                    navController.navigate("collection") {
+                        popUpTo("collection") { inclusive = false }
+                        launchSingleTop = true
+                    }
+                }) { Text("OK") }
+            }
+        )
+    }
 
     LaunchedEffect(Unit) {
         if (!hasShownWelcomeWizard) {
@@ -1313,8 +1323,14 @@ fun TangibleApp(
                     },
                     isWriting = isWritingMode,
                     writeError = writeError,
+                    onTagInfoUpdate = { info ->
+                        if (info != null) {
+                            onStartWriting(info)
+                        } else {
+                            onCancelWriting()
+                        }
+                    },
                     onWriteClick = { info -> onStartWriting(info) },
-                    onCancelClick = onCancelWriting,
                     onSearchAlbums = onSearchAlbums,
                     onSearchMovies = onSearchMovies,
                     onGetMovieStreaming = onGetMovieStreaming,

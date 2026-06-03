@@ -54,8 +54,8 @@ fun WriteTagScreen(
     onBackClick: () -> Unit,
     isWriting: Boolean = false,
     writeError: String? = null,
+    onTagInfoUpdate: (TagWriteInfo?) -> Unit,
     onWriteClick: (TagWriteInfo) -> Unit,
-    onCancelClick: () -> Unit = {},
     onSearchAlbums: suspend (String) -> List<DiscogsSearchResult> = { emptyList() },
     onAlbumSelected: suspend (DiscogsSearchResult) -> TagMediaUris = { TagMediaUris() },
     onSearchMovies: suspend (String) -> List<TmdbMovieResult> = { emptyList() },
@@ -89,6 +89,30 @@ fun WriteTagScreen(
     val showConfirmScreen = when (tagType) {
         TagType.MUSIC -> selectedAlbum != null
         TagType.MOVIE -> selectedMovie != null
+    }
+
+    // Tag Info for writing
+    val currentTagInfo = remember(tagType, selectedAlbum, selectedMovie, url, showConfirmScreen) {
+        if (!showConfirmScreen || url.isBlank()) null
+        else {
+            val title = when (tagType) {
+                TagType.MUSIC -> selectedAlbum?.albumName ?: ""
+                TagType.MOVIE -> selectedMovie?.title ?: ""
+            }
+            val subtitle = when (tagType) {
+                TagType.MUSIC -> selectedAlbum?.artistName ?: ""
+                TagType.MOVIE -> selectedMovie?.year ?: ""
+            }
+            val imageUrl = when (tagType) {
+                TagType.MUSIC -> selectedAlbum?.displayImage
+                TagType.MOVIE -> selectedMovie?.largePosterUrl
+            }
+            TagWriteInfo(title = title, subtitle = subtitle, type = tagType, imageUrl = imageUrl, url = url)
+        }
+    }
+
+    LaunchedEffect(currentTagInfo) {
+        onTagInfoUpdate(currentTagInfo)
     }
 
     // Reset state when switching tag types
@@ -212,22 +236,7 @@ fun WriteTagScreen(
         },
         containerColor = TangibleBackground
     ) { padding ->
-        if (isWriting) {
-            Box(
-                modifier = Modifier
-                    .padding(padding)
-                    .fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator()
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Hold tag near device...")
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = onCancelClick) { Text("Cancel") }
-                }
-            }
-        } else if (showConfirmScreen) {
+        if (showConfirmScreen) {
             WriteTagConfirmContent(
                 tagType = tagType,
                 selectedAlbum = selectedAlbum,
@@ -241,20 +250,9 @@ fun WriteTagScreen(
                 writeOptionId = writeOptionId,
                 onWriteOptionIdChange = { writeOptionId = it },
                 writeError = writeError,
+                isWriting = isWriting,
                 onWriteClick = {
-                    val title = when (tagType) {
-                        TagType.MUSIC -> selectedAlbum?.albumName ?: ""
-                        TagType.MOVIE -> selectedMovie?.title ?: ""
-                    }
-                    val subtitle = when (tagType) {
-                        TagType.MUSIC -> selectedAlbum?.artistName ?: ""
-                        TagType.MOVIE -> selectedMovie?.year ?: ""
-                    }
-                    val imageUrl = when (tagType) {
-                        TagType.MUSIC -> selectedAlbum?.displayImage
-                        TagType.MOVIE -> selectedMovie?.largePosterUrl
-                    }
-                    onWriteClick(TagWriteInfo(title = title, subtitle = subtitle, type = tagType, imageUrl = imageUrl, url = url))
+                    currentTagInfo?.let { onWriteClick(it) }
                 },
                 modifier = Modifier
                     .padding(padding)
@@ -412,7 +410,6 @@ private fun WriteTagSearchContent(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WriteTagConfirmContent(
     tagType: TagType,
@@ -428,7 +425,8 @@ private fun WriteTagConfirmContent(
     onWriteOptionIdChange: (String) -> Unit,
     writeError: String?,
     onWriteClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isWriting: Boolean = false
 ) {
     val isLoading = isLoadingFirstTrack || isLoadingStreaming
     var showWriteAsHelp by remember { mutableStateOf(false) }
@@ -635,15 +633,43 @@ private fun WriteTagConfirmContent(
                 }
             }
 
-            Button(
-                onClick = onWriteClick,
-                enabled = url.isNotBlank() && !isLoading,
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-            ) {
-                Text("Write Tag")
+            if (isWriting) {
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            "Hold tag near device...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                }
+            } else {
+                Button(
+                    onClick = onWriteClick,
+                    enabled = url.isNotBlank() && !isLoading,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                ) {
+                    Text(if (writeError != null) "Retry Writing" else "Write Tag")
+                }
             }
         }
     }
@@ -760,6 +786,6 @@ private fun SearchResultsCard(content: androidx.compose.foundation.lazy.LazyList
 @Composable
 fun WriteTagScreenPreview() {
     MaterialTheme {
-        WriteTagScreen(onBackClick = {}, onWriteClick = {})
+        WriteTagScreen(onBackClick = {}, onTagInfoUpdate = {}, onWriteClick = {})
     }
 }
