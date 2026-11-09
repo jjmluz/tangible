@@ -2,8 +2,10 @@ package com.example.tangible.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.runtime.mutableStateOf
 import com.example.tangible.SavedTag
 import com.example.tangible.data.MovieProvider
 import org.junit.Rule
@@ -38,7 +40,7 @@ class MainScreenTest {
     fun `MainScreen shows tags when list is not empty`() {
         val tags = listOf(
             SavedTag("1", "Song Title", "Artist Name", "MUSIC", "url1"),
-            SavedTag("2", "Movie Title", "Director", "MOVIE", "url2")
+            SavedTag("2", "Another Song", "Director", "MUSIC", "url2")
         )
 
         composeTestRule.setContent {
@@ -53,7 +55,7 @@ class MainScreenTest {
 
         composeTestRule.onNodeWithText("Song Title").assertIsDisplayed()
         composeTestRule.onNodeWithText("Artist Name").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Movie Title").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Another Song").assertIsDisplayed()
         composeTestRule.onNodeWithText("Director").assertIsDisplayed()
     }
 
@@ -73,14 +75,13 @@ class MainScreenTest {
                 onDismiss = {},
                 onUpdate = {},
                 onDelete = {},
-                sonosSpeakers = emptyList(),
                 chromecastDevices = emptyList(),
                 movieProviders = movieProviders
             )
         }
 
         // Expand Service dropdown (initially shows "Default")
-        composeTestRule.onNodeWithText("Default").performClick()
+        composeTestRule.onAllNodesWithText("Default")[0].performClick()
 
         // Only Netflix should be shown.
         // Prime is disabled.
@@ -89,5 +90,58 @@ class MainScreenTest {
         composeTestRule.onNodeWithText("Prime Video").assertDoesNotExist()
         composeTestRule.onNodeWithText("Prime Video (Rent)").assertDoesNotExist()
         composeTestRule.onNodeWithText("Disney+").assertDoesNotExist()
+    }
+
+    @Test
+    fun `TagDetailsModal for Music hides service and lists Music Assistant players`() {
+        val tag = SavedTag("1", "Kind of Blue", "Miles Davis", "MUSIC", "tangible://play?spotify_album=abc")
+        val players = listOf(
+            com.example.tangible.data.MusicAssistantPlayer("media_player.kitchen", "Kitchen"),
+            com.example.tangible.data.MusicAssistantPlayer("media_player.whole_house", "Whole House")
+        )
+
+        composeTestRule.setContent {
+            TagDetailsModal(
+                tag = tag,
+                onDismiss = {},
+                onUpdate = {},
+                onDelete = {},
+                chromecastDevices = emptyList(),
+                movieProviders = emptyList(),
+                maPlayers = players
+            )
+        }
+
+        composeTestRule.onNodeWithText("Service").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Default").performClick()
+        composeTestRule.onNodeWithText("Kitchen").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Whole House").assertIsDisplayed()
+        composeTestRule.onNodeWithText("This device").assertDoesNotExist()
+    }
+
+    @Test
+    fun `NFC warning banner shows only when tag launch is blocked and Allow calls back`() {
+        var fixClicks = 0
+        val blocked = mutableStateOf(true)
+
+        composeTestRule.setContent {
+            MainScreen(
+                tags = emptyList(),
+                selectedTagIds = emptySet(),
+                onPlay = {},
+                onTagClick = {},
+                onTagLongClick = {},
+                isNfcTagLaunchBlocked = blocked.value,
+                onFixNfcTagLaunch = { fixClicks++ }
+            )
+        }
+
+        composeTestRule.onNodeWithText("NFC tags can't open Tangible").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Allow").performClick()
+        assert(fixClicks == 1)
+
+        blocked.value = false
+        composeTestRule.onNodeWithText("NFC tags can't open Tangible").assertDoesNotExist()
+        composeTestRule.onNodeWithText("No tags yet.\nTap + to write your first tag.").assertIsDisplayed()
     }
 }

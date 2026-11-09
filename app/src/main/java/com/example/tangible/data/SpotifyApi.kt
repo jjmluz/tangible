@@ -18,22 +18,7 @@ interface SpotifyApi {
         @Query("limit") limit: Int = 10,
         @Header("Authorization") authHeader: String
     ): SpotifySearchResponse
-
-    @GET("v1/albums/{id}/tracks")
-    suspend fun getAlbumTracks(
-        @Path("id") albumId: String,
-        @Query("limit") limit: Int = 1,
-        @Header("Authorization") authHeader: String
-    ): SpotifyAlbumTracksResponse
 }
-
-data class SpotifyAlbumTracksResponse(
-    @SerializedName("items") val items: List<SpotifyTrack>
-)
-
-data class SpotifyTrack(
-    @SerializedName("uri") val uri: String
-)
 
 data class SpotifyTokenResponse(
     @SerializedName("access_token") val accessToken: String

@@ -26,7 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.example.tangible.TagMediaUris
+import com.example.tangible.SPOTIFY_ALBUM_PARAM
 import com.example.tangible.data.DiscogsSearchResult
 import com.example.tangible.data.MovieStreamingResult
 import com.example.tangible.data.TmdbMovieResult
@@ -57,7 +57,7 @@ fun WriteTagScreen(
     onTagInfoUpdate: (TagWriteInfo?) -> Unit,
     onWriteClick: (TagWriteInfo) -> Unit,
     onSearchAlbums: suspend (String) -> List<DiscogsSearchResult> = { emptyList() },
-    onAlbumSelected: suspend (DiscogsSearchResult) -> TagMediaUris = { TagMediaUris() },
+    onAlbumSelected: suspend (DiscogsSearchResult) -> String? = { null },
     onSearchMovies: suspend (String) -> List<TmdbMovieResult> = { emptyList() },
     onGetMovieStreaming: suspend (tmdbId: Int) -> MovieStreamingResult = {
         MovieStreamingResult(emptyList(), emptySet(), "", 0)
@@ -73,7 +73,7 @@ fun WriteTagScreen(
     var isSearching by remember { mutableStateOf(false) }
     var isLoadingFirstTrack by remember { mutableStateOf(false) }
     var writeOptionId by remember { mutableStateOf("tangible") }
-    var selectedUris by remember { mutableStateOf(TagMediaUris()) }
+    var spotifyAlbumId by remember { mutableStateOf<String?>(null) }
     var selectedAlbum by remember { mutableStateOf<DiscogsSearchResult?>(null) }
 
     // Movie state
@@ -120,7 +120,7 @@ fun WriteTagScreen(
         url = ""
         selectedAlbum = null
         selectedMovie = null
-        selectedUris = TagMediaUris()
+        spotifyAlbumId = null
         streamingResult = null
         writeOptionId = "tangible"
         if (tagType == TagType.MUSIC) {
@@ -133,32 +133,14 @@ fun WriteTagScreen(
     }
 
     // URL derivation
-    LaunchedEffect(writeOptionId, selectedUris, streamingResult, tagType) {
+    LaunchedEffect(writeOptionId, spotifyAlbumId, streamingResult, tagType) {
         url = when {
             writeOptionId == "tangible" -> {
                 if (tagType == TagType.MUSIC) {
-                    val queryParams = mutableListOf<String>()
-                    selectedUris.spotifyTrack?.let { queryParams.add("spotify_track=${Uri.encode(it)}") }
-                    selectedUris.spotifyAlbum?.let { queryParams.add("spotify_album=${Uri.encode(it)}") }
-                    selectedUris.ytm?.let { queryParams.add("ytm=${Uri.encode(it)}") }
-                    selectedUris.appleMusic?.let { queryParams.add("apple_music=${Uri.encode(it)}") }
-                    if (queryParams.isNotEmpty()) "tangible://play?${queryParams.joinToString("&")}" else ""
+                    spotifyAlbumId?.let { "tangible://play?$SPOTIFY_ALBUM_PARAM=${Uri.encode(it)}" } ?: ""
                 } else {
                     streamingResult?.tagUrl ?: ""
                 }
-            }
-            writeOptionId == "spotify" -> when {
-                selectedUris.spotifyAlbum != null -> "https://open.spotify.com/album/${selectedUris.spotifyAlbum}"
-                selectedUris.spotifyTrack != null -> "https://open.spotify.com/track/${selectedUris.spotifyTrack}"
-                else -> ""
-            }
-            writeOptionId == "ytm" -> {
-                val id = selectedUris.ytm
-                if (id != null && !id.startsWith("http")) "https://music.youtube.com/playlist?list=$id" else id ?: ""
-            }
-            writeOptionId == "apple" -> {
-                val id = selectedUris.appleMusic
-                if (id != null && !id.startsWith("http")) "https://music.apple.com/album/$id" else id ?: ""
             }
             writeOptionId.startsWith("direct:") -> {
                 val serviceId = writeOptionId.removePrefix("direct:")
@@ -221,7 +203,7 @@ fun WriteTagScreen(
                         if (showConfirmScreen) {
                             selectedAlbum = null
                             selectedMovie = null
-                            selectedUris = TagMediaUris()
+                            spotifyAlbumId = null
                             url = ""
                             streamingResult = null
                         } else {
@@ -241,7 +223,7 @@ fun WriteTagScreen(
                 tagType = tagType,
                 selectedAlbum = selectedAlbum,
                 selectedMovie = selectedMovie,
-                selectedUris = selectedUris,
+                spotifyAlbumId = spotifyAlbumId,
                 isLoadingFirstTrack = isLoadingFirstTrack,
                 isLoadingStreaming = isLoadingStreaming,
                 streamingResult = streamingResult,
@@ -270,7 +252,7 @@ fun WriteTagScreen(
                     selectedAlbum = result
                     scope.launch {
                         isLoadingFirstTrack = true
-                        selectedUris = onAlbumSelected(result)
+                        spotifyAlbumId = onAlbumSelected(result)
                         isLoadingFirstTrack = false
                     }
                 },
@@ -415,7 +397,7 @@ private fun WriteTagConfirmContent(
     tagType: TagType,
     selectedAlbum: DiscogsSearchResult?,
     selectedMovie: TmdbMovieResult?,
-    selectedUris: TagMediaUris,
+    spotifyAlbumId: String?,
     isLoadingFirstTrack: Boolean,
     isLoadingStreaming: Boolean,
     streamingResult: MovieStreamingResult?,
@@ -432,19 +414,9 @@ private fun WriteTagConfirmContent(
     var showWriteAsHelp by remember { mutableStateOf(false) }
     var showUrlPreview by remember { mutableStateOf(false) }
 
-    val writeOptions = remember(tagType, selectedUris, streamingResult) {
+    val writeOptions = remember(tagType, streamingResult) {
         val list = mutableListOf(WriteOption("tangible", "Tangible URI"))
-        if (tagType == TagType.MUSIC) {
-            if (selectedUris.spotifyTrack != null || selectedUris.spotifyAlbum != null) {
-                list.add(WriteOption("spotify", "Spotify URL"))
-            }
-            if (selectedUris.ytm != null) {
-                list.add(WriteOption("ytm", "YouTube Music URL"))
-            }
-            if (selectedUris.appleMusic != null) {
-                list.add(WriteOption("apple", "Apple Music URL"))
-            }
-        } else {
+        if (tagType == TagType.MOVIE) {
             streamingResult?.options?.forEach { opt ->
                 list.add(WriteOption("direct:${opt.serviceId}", "${opt.serviceName} URL"))
             }
@@ -465,7 +437,7 @@ private fun WriteTagConfirmContent(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            "The 'smart' option. Stores IDs for multiple services. When scanned, Tangible chooses your preferred service and player automatically.",
+                            "The 'smart' option. When scanned, Tangible plays it on your preferred player automatically. Music tags always use this.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -476,7 +448,7 @@ private fun WriteTagConfirmContent(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            "The 'universal' option. Writes a standard link (e.g., spotify.com). Works on any phone even without Tangible installed.",
+                            "Movies only. Writes a standard link (e.g., netflix.com). Works on any phone even without Tangible installed.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -522,7 +494,7 @@ private fun WriteTagConfirmContent(
                 ) {
                     CircularProgressIndicator()
                     Text(
-                        if (tagType == TagType.MUSIC) "Looking up streaming links…" else "Fetching streaming availability in $region…",
+                        if (tagType == TagType.MUSIC) "Looking up the album on Spotify…" else "Fetching streaming availability in $region…",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -570,6 +542,14 @@ private fun WriteTagConfirmContent(
                             subtitle,
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    if (tagType == TagType.MUSIC && spotifyAlbumId == null) {
+                        Text(
+                            "Couldn't find this album on Spotify, so it can't be written to a tag.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
                             textAlign = TextAlign.Center
                         )
                     }

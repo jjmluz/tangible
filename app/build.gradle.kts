@@ -73,7 +73,6 @@ dependencies {
     implementation(libs.retrofit.gson)
     implementation(libs.okhttp.logging)
     implementation(libs.coil.compose)
-    implementation(files("libs/spotify-app-remote-release-0.8.0.aar"))
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("io.github.mobile-dev-inc:dadb:1.2.7")
 
@@ -85,6 +84,7 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
     testImplementation("org.robolectric:robolectric:4.12.1")
     testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")

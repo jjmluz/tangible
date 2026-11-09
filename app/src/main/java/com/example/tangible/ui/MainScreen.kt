@@ -64,9 +64,12 @@ fun MainScreen(
     onViewModeChange: (ViewMode) -> Unit = {},
     onUpdateTag: (SavedTag) -> Unit = {},
     onDeleteTag: (String) -> Unit = {},
-    sonosSpeakers: List<com.example.tangible.data.SonosSpeaker> = emptyList(),
     chromecastDevices: List<com.example.tangible.data.ChromecastDevice> = emptyList(),
-    movieProviders: List<com.example.tangible.data.MovieProvider> = emptyList()
+    movieProviders: List<com.example.tangible.data.MovieProvider> = emptyList(),
+    maPlayers: List<com.example.tangible.data.MusicAssistantPlayer> = emptyList(),
+    isNfcTagLaunchBlocked: Boolean = false,
+    onFixNfcTagLaunch: () -> Unit = {},
+    bottomContentPadding: androidx.compose.ui.unit.Dp = 112.dp
 ) {
     var selectedType by remember { mutableStateOf("MUSIC") }
     var tagToEdit by remember { mutableStateOf<SavedTag?>(null) }
@@ -95,13 +98,17 @@ fun MainScreen(
                 onDeleteTag(tagToEdit!!.id)
                 tagToEdit = null
             },
-            sonosSpeakers = sonosSpeakers,
             chromecastDevices = chromecastDevices,
-            movieProviders = movieProviders
+            movieProviders = movieProviders,
+            maPlayers = maPlayers
         )
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Column(modifier = modifier.fillMaxSize()) {
+    if (isNfcTagLaunchBlocked) {
+        NfcTagLaunchBlockedBanner(onFix = onFixNfcTagLaunch)
+    }
+    Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
         if (filteredTags.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -122,7 +129,7 @@ fun MainScreen(
             if (viewMode == ViewMode.LIST) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(top = 72.dp, bottom = 112.dp)
+                    contentPadding = PaddingValues(top = 72.dp, bottom = bottomContentPadding)
                 ) {
                     items(filteredTags, key = { it.id }) { tag ->
                         TagRow(
@@ -140,7 +147,7 @@ fun MainScreen(
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(3),
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(top = 72.dp, bottom = 112.dp, start = 8.dp, end = 8.dp),
+                    contentPadding = PaddingValues(top = 72.dp, bottom = bottomContentPadding, start = 8.dp, end = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -236,6 +243,40 @@ fun MainScreen(
             }
         }
     }
+    }
+}
+
+/** Shown when Android's per-app NFC setting stops tags from opening Tangible. */
+@Composable
+fun NfcTagLaunchBlockedBanner(onFix: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.Warning, contentDescription = null)
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "NFC tags can't open Tangible",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "Scanning a tag won't play anything until you allow it in Android's NFC settings.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            TextButton(onClick = onFix) { Text("Allow") }
+        }
+    }
 }
 
 @Composable
@@ -315,9 +356,9 @@ fun TagDetailsModal(
     onDismiss: () -> Unit,
     onUpdate: (SavedTag) -> Unit,
     onDelete: () -> Unit,
-    sonosSpeakers: List<com.example.tangible.data.SonosSpeaker>,
     chromecastDevices: List<com.example.tangible.data.ChromecastDevice>,
-    movieProviders: List<com.example.tangible.data.MovieProvider>
+    movieProviders: List<com.example.tangible.data.MovieProvider>,
+    maPlayers: List<com.example.tangible.data.MusicAssistantPlayer> = emptyList()
 ) {
     var selectedService by remember { mutableStateOf(tag.customService ?: "DEFAULT") }
     var selectedOutputId by remember { mutableStateOf(tag.customOutputId ?: "DEFAULT") }
@@ -354,32 +395,20 @@ fun TagDetailsModal(
                     }
                 }
 
-                // Service Dropdown
-                DetailDropdown(
+                // Service Dropdown (music always plays Spotify through Music Assistant)
+                if (tag.type != "MUSIC") DetailDropdown(
                     label = "Service",
                     selectedId = selectedService,
                     onSelectedChange = { selectedService = it },
                     options = buildList {
                         if (isTangibleUri) {
                             add("DEFAULT" to "Default")
-                            if (tag.type == "MUSIC") {
-                                add("SPOTIFY" to "Spotify")
-                                add("YOUTUBE_MUSIC" to "YouTube Music")
-                                add("APPLE_MUSIC" to "Apple Music")
-                            } else {
-                                val serviceDisplayNames = com.example.tangible.data.StreamingAvailabilityRepository.getServiceDisplayNamesFromTangibleUri(tag.url)
-                                movieProviders
-                                    .filter { it.isEnabled && it.id in serviceDisplayNames }
-                                    .forEach { add("MOVIE_PROVIDER:${it.id}" to (serviceDisplayNames[it.id] ?: it.name)) }
-                            }
+                            val serviceDisplayNames = com.example.tangible.data.StreamingAvailabilityRepository.getServiceDisplayNamesFromTangibleUri(tag.url)
+                            movieProviders
+                                .filter { it.isEnabled && it.id in serviceDisplayNames }
+                                .forEach { add("MOVIE_PROVIDER:${it.id}" to (serviceDisplayNames[it.id] ?: it.name)) }
                         } else {
-                            val serviceName = when {
-                                tag.url.contains("spotify.com") -> "Spotify"
-                                tag.url.contains("youtube.com") || tag.url.contains("music.youtube.com") -> "YouTube Music"
-                                tag.url.contains("apple.com") -> "Apple Music"
-                                else -> "Direct Link"
-                            }
-                            add("DIRECT" to serviceName)
+                            add("DIRECT" to "Direct Link")
                         }
                     },
                     enabled = isTangibleUri
@@ -393,12 +422,12 @@ fun TagDetailsModal(
                     options = buildList {
                         if (isTangibleUri) {
                             add("DEFAULT" to "Default")
-                            add("THIS_DEVICE" to "This device")
                             if (tag.type == "MUSIC") {
-                                add("SONOS_ALL" to "Sonos: All speakers")
-                                sonosSpeakers.forEach { add("SONOS:${it.ip}" to "Sonos: ${it.name}") }
+                                maPlayers.forEach { add("${com.example.tangible.MA_OUTPUT_PREFIX}${it.entityId}" to it.name) }
+                            } else {
+                                add("THIS_DEVICE" to "This device")
+                                chromecastDevices.forEach { add("CHROMECAST:${it.id}" to "Google TV: ${it.name}") }
                             }
-                            chromecastDevices.forEach { add("CHROMECAST:${it.id}" to "Google TV: ${it.name}") }
                         } else {
                             add("THIS_DEVICE" to "This device")
                         }

@@ -1,6 +1,7 @@
 package com.example.tangible.data
 
 import android.util.Base64
+import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -36,24 +37,16 @@ class SpotifyRepository(private val clientId: String, private val clientSecret: 
 
     suspend fun searchAlbums(query: String): List<SpotifyAlbum> {
         if (clientId.isBlank() || clientSecret.isBlank()) return emptyList()
-        return try {
-            ensureToken()
-            val response = api.search(query = query, authHeader = "Bearer $accessToken")
-            response.albums.items
-        } catch (e: Exception) {
-            accessToken = null // Force re-auth on next try
-            emptyList()
+        // Tokens expire after an hour, so on failure retry once with a fresh one.
+        repeat(2) {
+            try {
+                ensureToken()
+                return api.search(query = query, authHeader = "Bearer $accessToken").albums.items
+            } catch (e: Exception) {
+                Log.w("SpotifyRepository", "Album search failed: ${e.message}")
+                accessToken = null
+            }
         }
-    }
-
-    suspend fun getFirstTrackUri(albumId: String): String? {
-        if (clientId.isBlank() || clientSecret.isBlank()) return null
-        return try {
-            ensureToken()
-            val response = api.getAlbumTracks(albumId = albumId, authHeader = "Bearer $accessToken")
-            response.items.firstOrNull()?.uri
-        } catch (e: Exception) {
-            null
-        }
+        return emptyList()
     }
 }
