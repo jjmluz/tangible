@@ -66,7 +66,6 @@ fun MainScreen(
     onDeleteTag: (String) -> Unit = {},
     chromecastDevices: List<com.example.tangible.data.ChromecastDevice> = emptyList(),
     movieProviders: List<com.example.tangible.data.MovieProvider> = emptyList(),
-    maPlayers: List<com.example.tangible.data.MusicAssistantPlayer> = emptyList(),
     isNfcTagLaunchBlocked: Boolean = false,
     onFixNfcTagLaunch: () -> Unit = {},
     bottomContentPadding: androidx.compose.ui.unit.Dp = 112.dp
@@ -99,8 +98,7 @@ fun MainScreen(
                 tagToEdit = null
             },
             chromecastDevices = chromecastDevices,
-            movieProviders = movieProviders,
-            maPlayers = maPlayers
+            movieProviders = movieProviders
         )
     }
 
@@ -357,8 +355,7 @@ fun TagDetailsModal(
     onUpdate: (SavedTag) -> Unit,
     onDelete: () -> Unit,
     chromecastDevices: List<com.example.tangible.data.ChromecastDevice>,
-    movieProviders: List<com.example.tangible.data.MovieProvider>,
-    maPlayers: List<com.example.tangible.data.MusicAssistantPlayer> = emptyList()
+    movieProviders: List<com.example.tangible.data.MovieProvider>
 ) {
     var selectedService by remember { mutableStateOf(tag.customService ?: "DEFAULT") }
     var selectedOutputId by remember { mutableStateOf(tag.customOutputId ?: "DEFAULT") }
@@ -395,8 +392,8 @@ fun TagDetailsModal(
                     }
                 }
 
-                // Service Dropdown (music always plays Spotify through Music Assistant)
-                if (tag.type != "MUSIC") DetailDropdown(
+                // Service Dropdown
+                DetailDropdown(
                     label = "Service",
                     selectedId = selectedService,
                     onSelectedChange = { selectedService = it },
@@ -422,12 +419,8 @@ fun TagDetailsModal(
                     options = buildList {
                         if (isTangibleUri) {
                             add("DEFAULT" to "Default")
-                            if (tag.type == "MUSIC") {
-                                maPlayers.forEach { add("${com.example.tangible.MA_OUTPUT_PREFIX}${it.entityId}" to it.name) }
-                            } else {
-                                add("THIS_DEVICE" to "This device")
-                                chromecastDevices.forEach { add("CHROMECAST:${it.id}" to "Google TV: ${it.name}") }
-                            }
+                            add("THIS_DEVICE" to "This device")
+                            chromecastDevices.forEach { add("CHROMECAST:${it.id}" to "Google TV: ${it.name}") }
                         } else {
                             add("THIS_DEVICE" to "This device")
                         }
@@ -523,7 +516,14 @@ private fun TagRow(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
-                onClick = { if (isSelectionMode) onTagClick() else onEdit() },
+                // Music plays on tap; movies still open Edit tag and have their own play button.
+                onClick = {
+                    when {
+                        isSelectionMode -> onTagClick()
+                        tag.type == "MUSIC" -> onPlay()
+                        else -> onEdit()
+                    }
+                },
                 onLongClick = onTagLongClick
             )
             .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else Color.Transparent)
@@ -596,8 +596,14 @@ private fun TagRow(
             )
         }
 
-        // Play button - disappear in selection mode
-        if (!isSelectionMode) {
+        // Play button (movies only) - disappears in selection mode
+        if (isSelectionMode) {
+            Checkbox(
+                checked = isSelected,
+                onCheckedChange = { onTagClick() },
+                colors = CheckboxDefaults.colors(checkedColor = TangiblePurple)
+            )
+        } else if (tag.type != "MUSIC") {
             IconButton(onClick = onPlay, modifier = Modifier.size(44.dp)) {
                 Icon(
                     imageVector = Icons.Default.PlayArrow,
@@ -606,12 +612,6 @@ private fun TagRow(
                     modifier = Modifier.size(28.dp)
                 )
             }
-        } else {
-            Checkbox(
-                checked = isSelected,
-                onCheckedChange = { onTagClick() },
-                colors = CheckboxDefaults.colors(checkedColor = TangiblePurple)
-            )
         }
     }
 }
@@ -631,7 +631,14 @@ private fun TagGridItem(
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .combinedClickable(
-                onClick = { if (isSelectionMode) onTagClick() else onEdit() },
+                // Music plays on tap; movies still open Edit tag and have their own play button.
+                onClick = {
+                    when {
+                        isSelectionMode -> onTagClick()
+                        tag.type == "MUSIC" -> onPlay()
+                        else -> onEdit()
+                    }
+                },
                 onLongClick = onTagLongClick
             )
             .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else Color.Transparent)
@@ -679,8 +686,8 @@ private fun TagGridItem(
                 }
             }
 
-            // Play button overlay
-            if (!isSelectionMode) {
+            // Play button overlay (movies only)
+            if (!isSelectionMode && tag.type != "MUSIC") {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()

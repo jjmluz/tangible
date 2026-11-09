@@ -8,6 +8,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.runtime.mutableStateOf
 import com.example.tangible.SavedTag
 import com.example.tangible.data.MovieProvider
+import androidx.compose.ui.test.onNodeWithContentDescription
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -93,30 +95,69 @@ class MainScreenTest {
     }
 
     @Test
-    fun `TagDetailsModal for Music hides service and lists Music Assistant players`() {
-        val tag = SavedTag("1", "Kind of Blue", "Miles Davis", "MUSIC", "tangible://play?spotify_album=abc")
-        val players = listOf(
-            com.example.tangible.data.MusicAssistantPlayer("media_player.kitchen", "Kitchen"),
-            com.example.tangible.data.MusicAssistantPlayer("media_player.whole_house", "Whole House")
-        )
+    fun `tapping a music tag plays it, with no play button or edit dialog`() {
+        val music = SavedTag("1", "Kind of Blue", "Miles Davis", "MUSIC", "tangible://play?spotify_album=abc")
+        val played = mutableListOf<String>()
 
         composeTestRule.setContent {
-            TagDetailsModal(
-                tag = tag,
-                onDismiss = {},
-                onUpdate = {},
-                onDelete = {},
-                chromecastDevices = emptyList(),
-                movieProviders = emptyList(),
-                maPlayers = players
+            MainScreen(
+                tags = listOf(music),
+                selectedTagIds = emptySet(),
+                onPlay = { played += it.id },
+                onTagClick = {},
+                onTagLongClick = {},
+                viewMode = ViewMode.LIST
             )
         }
 
-        composeTestRule.onNodeWithText("Service").assertDoesNotExist()
-        composeTestRule.onNodeWithText("Default").performClick()
-        composeTestRule.onNodeWithText("Kitchen").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Whole House").assertIsDisplayed()
-        composeTestRule.onNodeWithText("This device").assertDoesNotExist()
+        composeTestRule.onNodeWithContentDescription("Play").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Kind of Blue").performClick()
+
+        assertEquals(listOf("1"), played)
+        composeTestRule.onNodeWithText("Edit Tag").assertDoesNotExist()
+    }
+
+    @Test
+    fun `tapping a music tag in the gallery plays it`() {
+        val music = SavedTag("1", "Kind of Blue", "Miles Davis", "MUSIC", "tangible://play?spotify_album=abc")
+        val played = mutableListOf<String>()
+
+        composeTestRule.setContent {
+            MainScreen(
+                tags = listOf(music),
+                selectedTagIds = emptySet(),
+                onPlay = { played += it.id },
+                onTagClick = {},
+                onTagLongClick = {},
+                viewMode = ViewMode.GALLERY
+            )
+        }
+
+        composeTestRule.onNodeWithContentDescription("Play").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Kind of Blue").performClick()
+        assertEquals(listOf("1"), played)
+    }
+
+    @Test
+    fun `tapping in selection mode selects instead of playing`() {
+        val music = SavedTag("1", "Kind of Blue", "Miles Davis", "MUSIC", "tangible://play?spotify_album=abc")
+        val played = mutableListOf<String>()
+        val clicked = mutableListOf<String>()
+
+        composeTestRule.setContent {
+            MainScreen(
+                tags = listOf(music),
+                selectedTagIds = setOf("1"),
+                onPlay = { played += it.id },
+                onTagClick = { clicked += it },
+                onTagLongClick = {},
+                viewMode = ViewMode.LIST
+            )
+        }
+
+        composeTestRule.onNodeWithText("Kind of Blue").performClick()
+        assertEquals(listOf("1"), clicked)
+        assertEquals(emptyList<String>(), played)
     }
 
     @Test

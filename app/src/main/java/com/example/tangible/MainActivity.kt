@@ -82,9 +82,6 @@ import kotlinx.coroutines.launch
 /** Music tags look like `tangible://play?spotify_album=<id>`. */
 const val SPOTIFY_ALBUM_PARAM = "spotify_album"
 
-/** Prefix for a tag's custom music output: `MA:<media_player entity id>`. */
-const val MA_OUTPUT_PREFIX = "MA:"
-
 data class SavedTag(
     val id: String,
     val title: String,
@@ -596,12 +593,8 @@ class MainActivity : ComponentActivity() {
 
         val albumId = spotifyAlbumId
         if (albumId != null && !isWritingMode) {
-            val playerId = savedTag?.customOutputId
-                ?.takeIf { it.startsWith(MA_OUTPUT_PREFIX) }
-                ?.removePrefix(MA_OUTPUT_PREFIX)
-                ?: selectedMaPlayerId
-            // A real scan opens Now Playing; the play button in the collection just starts playback.
-            playOnMusicAssistant(albumId, playerId, openNowPlaying = customTag == null)
+            // Every music tag plays on the default player, from a scan or a tap in the collection.
+            playOnMusicAssistant(albumId, selectedMaPlayerId)
             return
         }
 
@@ -713,11 +706,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun playOnMusicAssistant(
-        spotifyAlbumId: String,
-        playerId: String?,
-        openNowPlaying: Boolean = false
-    ) {
+    private fun playOnMusicAssistant(spotifyAlbumId: String, playerId: String?) {
         if (haServerUrl.isBlank() || haAccessToken.isBlank()) {
             Toast.makeText(this, "Set up Music Assistant in Settings first", Toast.LENGTH_LONG).show()
             return
@@ -727,7 +716,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         nowPlaying.playbackStarting(playerId)
-        if (openNowPlaying) openNowPlayingRequest++
+        openNowPlayingRequest++
         val volume = maDefaultVolume
         lifecycleScope.launch {
             // Set the volume first so the album doesn't start loud. A failure here shouldn't stop playback.
@@ -1111,7 +1100,6 @@ fun TangibleApp(
                     onDeleteTag = { onDeleteTags(setOf(it)) },
                     chromecastDevices = chromecastDevices,
                     movieProviders = movieProviders,
-                    maPlayers = maPlayers,
                     isNfcTagLaunchBlocked = isNfcTagLaunchBlocked,
                     onFixNfcTagLaunch = onFixNfcTagLaunch,
                     bottomContentPadding = if (miniStatus != null) 184.dp else 112.dp
