@@ -189,23 +189,40 @@ class HomeAssistantRepository(
         val entityId = obj.get("entity_id").asString
         // Music Assistant sets an absolute image URL; other players get HA's relative proxy path.
         val picture = str("entity_picture")?.let { if (it.startsWith("http")) it else baseUrl + it }
+        val state = obj.get("state")?.asString ?: "unknown"
+        val duration = num("media_duration")
+        var position = num("media_position")
+        var positionUpdatedAt = parseTime(str("media_position_updated_at"))
+        // HA only refreshes the position now and then. When a player pauses, the reported position
+        // can be from before the pause (even the start of the track), so count forward from that
+        // update to the moment the state changed to paused.
+        val stateChangedAt = parseTime(obj.get("last_changed")?.takeUnless { it.isJsonNull }?.asString)
+        if (state == "paused" && position != null && positionUpdatedAt != null &&
+            stateChangedAt != null && stateChangedAt > positionUpdatedAt
+        ) {
+            val played = position + (stateChangedAt - positionUpdatedAt) / 1000.0
+            position = duration?.let { played.coerceAtMost(it) } ?: played
+            positionUpdatedAt = stateChangedAt
+        }
         return PlayerStatus(
             entityId = entityId,
             name = str("friendly_name") ?: entityId,
-            state = obj.get("state")?.asString ?: "unknown",
+            state = state,
             title = str("media_title"),
             artist = str("media_artist"),
             album = str("media_album_name"),
             artworkUrl = picture,
-            durationSec = num("media_duration"),
-            positionSec = num("media_position"),
-            positionUpdatedAtMs = str("media_position_updated_at")?.let {
-                runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
-            },
+            durationSec = duration,
+            positionSec = position,
+            positionUpdatedAtMs = positionUpdatedAt,
             volume = num("volume_level")?.toFloat(),
             isMuted = attrs.get("is_volume_muted")?.takeUnless { it.isJsonNull }?.asBoolean ?: false,
             contentId = str("media_content_id")
         )
+    }
+
+    private fun parseTime(value: String?): Long? = value?.let {
+        runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
     }
 
     private fun authorized(url: String, token: String) = Request.Builder()
