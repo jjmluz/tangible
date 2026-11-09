@@ -10,14 +10,18 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import com.example.tangible.data.ChromecastDevice
 import com.example.tangible.data.MusicAssistantPlayer
 
@@ -182,6 +186,8 @@ fun MusicAssistantScreen(
     onRefresh: () -> Unit,
     isRefreshing: Boolean,
     error: String?,
+    defaultVolume: Int? = null,
+    onDefaultVolumeChange: (Int?) -> Unit = {},
 ) {
     val isConfigured = serverUrl.isNotBlank() && accessToken.isNotBlank()
 
@@ -252,6 +258,9 @@ fun MusicAssistantScreen(
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation()
             )
+            // Above the player list, which can be long.
+            Spacer(Modifier.height(24.dp))
+            DefaultVolumeSection(volume = defaultVolume, onVolumeChange = onDefaultVolumeChange)
             Spacer(Modifier.height(16.dp))
             DeviceSection(
                 title = "Player",
@@ -279,6 +288,74 @@ fun MusicAssistantScreen(
         }
     }
 }
+
+/** Off (null) or a 0–100 volume that's applied right before an album starts. */
+@Composable
+internal fun DefaultVolumeSection(volume: Int?, onVolumeChange: (Int?) -> Unit) {
+    // Remember the last level so switching off and on again doesn't lose it.
+    var lastLevel by rememberSaveable { mutableIntStateOf(volume ?: DEFAULT_VOLUME_SUGGESTION) }
+    var dragLevel by remember { mutableStateOf<Float?>(null) }
+    Text(
+        text = "PLAYBACK",
+        style = MaterialTheme.typography.labelMedium,
+        color = TangiblePurple,
+        modifier = Modifier.padding(horizontal = 20.dp)
+    )
+    ListItem(
+        headlineContent = { Text("Default volume") },
+        supportingContent = {
+            Text(
+                if (volume == null) "Albums start at whatever volume the player is at"
+                else "Albums start at $volume% when you scan a tag or tap play"
+            )
+        },
+        trailingContent = {
+            Switch(
+                checked = volume != null,
+                onCheckedChange = { on -> onVolumeChange(if (on) lastLevel else null) },
+                modifier = Modifier.testTag("default_volume_switch")
+            )
+        },
+        colors = ListItemDefaults.colors(containerColor = TangibleBackground),
+        modifier = Modifier.padding(horizontal = 4.dp)
+    )
+    if (volume != null) {
+        val shown = dragLevel?.roundToInt() ?: volume
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 20.dp)
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.VolumeDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Slider(
+                value = dragLevel ?: volume.toFloat(),
+                onValueChange = { dragLevel = it },
+                onValueChangeFinished = {
+                    dragLevel?.roundToInt()?.let {
+                        lastLevel = it
+                        onVolumeChange(it)
+                    }
+                    dragLevel = null
+                },
+                valueRange = 0f..100f,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp)
+                    .testTag("default_volume_slider")
+            )
+            Text(
+                text = "$shown%",
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.width(44.dp)
+            )
+        }
+    }
+}
+
+private const val DEFAULT_VOLUME_SUGGESTION = 30
 
 // ─── Default player Sub-page ───────────────────────────────────────────────────
 

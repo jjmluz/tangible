@@ -128,6 +128,8 @@ class MainActivity : ComponentActivity() {
     private var haServerUrl by mutableStateOf("")
     private var haAccessToken by mutableStateOf("")
     private var selectedMaPlayerId by mutableStateOf<String?>(null)
+    /** 0–100, applied right before an album starts; null leaves the volume alone. */
+    private var maDefaultVolume by mutableStateOf<Int?>(null)
     private var maPlayers by mutableStateOf<List<MusicAssistantPlayer>>(emptyList())
     private var isMaRefreshing by mutableStateOf(false)
     private var maError by mutableStateOf<String?>(null)
@@ -218,6 +220,7 @@ class MainActivity : ComponentActivity() {
         haServerUrl = prefs.getString("ha_server_url", "") ?: ""
         haAccessToken = prefs.getString("ha_access_token", "") ?: ""
         selectedMaPlayerId = prefs.getString("selected_ma_player_id", null)
+        maDefaultVolume = prefs.getInt("ma_default_volume", -1).takeIf { it in 0..100 }
         val moviePlayerValue = prefs.getString("selected_movie_player", MoviePlayer.THIS_DEVICE.name)
         selectedMoviePlayer = MoviePlayer.entries.find { it.name == moviePlayerValue } ?: MoviePlayer.THIS_DEVICE
         region = prefs.getString("region", "US") ?: "US"
@@ -288,6 +291,13 @@ class MainActivity : ComponentActivity() {
                             if (nowPlaying.status?.isActive != true) nowPlaying.setPlayer(entityId)
                         },
                         onRefreshMa = { refreshMaPlayers() },
+                        maDefaultVolume = maDefaultVolume,
+                        onMaDefaultVolumeChange = { level ->
+                            maDefaultVolume = level
+                            prefs.edit().apply {
+                                if (level == null) remove("ma_default_volume") else putInt("ma_default_volume", level)
+                            }.apply()
+                        },
                         isMaRefreshing = isMaRefreshing,
                         maError = maError,
                         isNfcTagLaunchBlocked = isNfcTagLaunchBlocked,
@@ -718,7 +728,13 @@ class MainActivity : ComponentActivity() {
         }
         nowPlaying.playbackStarting(playerId)
         if (openNowPlaying) openNowPlayingRequest++
+        val volume = maDefaultVolume
         lifecycleScope.launch {
+            // Set the volume first so the album doesn't start loud. A failure here shouldn't stop playback.
+            if (volume != null) {
+                homeAssistantRepository.setVolume(haServerUrl, haAccessToken, playerId, volume / 100f)
+                    .onFailure { Log.w("Tangible", "Couldn't set the default volume: ${it.message}") }
+            }
             val result = homeAssistantRepository.playSpotifyAlbum(haServerUrl, haAccessToken, playerId, spotifyAlbumId)
             nowPlaying.playbackStarted(result)
             result.onFailure { e ->
@@ -834,6 +850,8 @@ fun TangibleApp(
     selectedMaPlayerId: String? = null,
     onMaPlayerSelected: (String) -> Unit = {},
     onRefreshMa: () -> Unit = {},
+    maDefaultVolume: Int? = null,
+    onMaDefaultVolumeChange: (Int?) -> Unit = {},
     isMaRefreshing: Boolean = false,
     maError: String? = null,
     isNfcTagLaunchBlocked: Boolean = false,
@@ -1184,7 +1202,9 @@ fun TangibleApp(
                     onPlayerSelected = onMaPlayerSelected,
                     onRefresh = onRefreshMa,
                     isRefreshing = isMaRefreshing,
-                    error = maError
+                    error = maError,
+                    defaultVolume = maDefaultVolume,
+                    onDefaultVolumeChange = onMaDefaultVolumeChange
                 )
             }
             composable("movie_player") {
