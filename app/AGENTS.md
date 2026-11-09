@@ -56,11 +56,15 @@ It's a personal project. It won't be published on the Play Store, so backwards c
 
 ## Known issues
 
-- API keys and secrets (Discogs, TMDB, Streaming Availability, Spotify client ID/secret) are
-  hard-coded in `MainActivity.kt`. Move them to `local.properties` / `BuildConfig` and rotate them.
 - The Home Assistant token is stored in plain SharedPreferences.
 - Old settings from removed features (Sonos, Qobuz, selected service) are left in
   SharedPreferences and are unused.
+
+## Secrets
+
+API keys (Discogs, TMDB, Streaming Availability, Spotify client ID/secret) live in
+`local.properties` (git-ignored) and reach the code through `BuildConfig` (see
+`app/build.gradle.kts`). Never hard-code keys or tokens in tracked files.
 
 ## Development
 

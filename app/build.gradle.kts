@@ -1,7 +1,15 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
 }
+
+// API keys live in local.properties (not tracked by git); see README.md.
+val localProperties = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+fun secret(name: String): String = localProperties.getProperty(name) ?: System.getenv(name) ?: ""
 
 android {
     namespace = "com.example.tangible"
@@ -15,6 +23,14 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        listOf(
+            "DISCOGS_TOKEN",
+            "TMDB_API_KEY",
+            "STREAMING_AVAILABILITY_API_KEY",
+            "SPOTIFY_CLIENT_ID",
+            "SPOTIFY_CLIENT_SECRET"
+        ).forEach { buildConfigField("String", it, "\"${secret(it)}\"") }
     }
 
     buildTypes {
@@ -32,6 +48,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     testOptions {
         unitTests {

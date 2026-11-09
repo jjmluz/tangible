@@ -46,6 +46,19 @@ Music tags written before the Music Assistant change don't work any more; write 
 
 Needs JDK 17+ (Android Studio's bundled JBR works).
 
+API keys aren't in git. Add them to `local.properties` in the project root (git ignores it), or set
+them as environment variables with the same names:
+
+```properties
+DISCOGS_TOKEN=...
+TMDB_API_KEY=...
+STREAMING_AVAILABILITY_API_KEY=...
+SPOTIFY_CLIENT_ID=...
+SPOTIFY_CLIENT_SECRET=...
+```
+
+They're compiled into `BuildConfig`. A missing key builds fine, but that feature's requests fail.
+
 ```bash
 ./gradlew :app:testDebugUnitTest
 ./gradlew :app:assembleDebug

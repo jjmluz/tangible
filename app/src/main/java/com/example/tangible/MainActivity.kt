@@ -143,14 +143,14 @@ class MainActivity : ComponentActivity() {
     private var collectionViewMode by mutableStateOf(ViewMode.LIST)
 
     // Repositories
-    private val discogsToken = "REMOVED_SECRET"
+    private val discogsToken = BuildConfig.DISCOGS_TOKEN
     private val discogsRepository by lazy { DiscogsRepository(discogsToken) }
-    private val tmdbApiKey = "REMOVED_SECRET"
+    private val tmdbApiKey = BuildConfig.TMDB_API_KEY
     private val tmdbRepository by lazy { TmdbRepository(tmdbApiKey) }
-    private val streamingApiKey = "REMOVED_SECRET"
+    private val streamingApiKey = BuildConfig.STREAMING_AVAILABILITY_API_KEY
     private val streamingRepository by lazy { StreamingAvailabilityRepository(streamingApiKey) }
-    private val clientId = "REMOVED_SECRET"
-    private val clientSecret = "REMOVED_SECRET"
+    private val clientId = BuildConfig.SPOTIFY_CLIENT_ID
+    private val clientSecret = BuildConfig.SPOTIFY_CLIENT_SECRET
     private val spotifyRepository by lazy { SpotifyRepository(clientId, clientSecret) }
     private val chromecastDiscovery by lazy { ChromecastDiscovery(this) }
     private val adbRepository by lazy { AdbRepository(this) }
