@@ -4,6 +4,7 @@ import com.example.tangible.data.HomeAssistantRepository
 import com.example.tangible.data.PlayerStatus
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -305,5 +306,71 @@ class NowPlayingControllerTest {
             Result.success(status(state = "playing", contentId = "track/2", positionSec = 2.0))
         controller.refresh()
         assertEquals(2.0, controller.status!!.positionSec!!, 0.0)
+    }
+
+    @Test
+    fun `resuming seeks to where the track stopped, then plays`() = runTest {
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns
+            Result.success(status(state = "playing", positionSec = 14.0).copy(positionUpdatedAtMs = 0))
+        coEvery { repo.pause(any(), any(), any()) } returns Result.success(Unit)
+        coEvery { repo.seek(any(), any(), any(), any()) } returns Result.success(Unit)
+        coEvery { repo.play(any(), any(), any()) } returns Result.success(Unit)
+        val controller = controller()
+        controller.setPlayer("media_player.a")
+        runCurrent()
+
+        advanceTimeBy(21_000)
+        controller.playPause() // pause at 0:35
+        // Music Assistant has saved 0:34.
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns Result.success(status(state = "idle", positionSec = 34.0))
+        advanceTimeBy(5_000)
+        runCurrent()
+
+        controller.playPause()
+        assertEquals(35.0, controller.status!!.positionSec!!, 0.01)
+        runCurrent()
+
+        coVerifyOrder {
+            repo.seek("http://ha", "token", "media_player.a", 35.0)
+            repo.play("http://ha", "token", "media_player.a")
+        }
+    }
+
+    @Test
+    fun `resuming without a known stop position just plays`() = runTest {
+        // The app opened on a track that was already paused.
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns Result.success(status(state = "idle", positionSec = 34.0))
+        coEvery { repo.play(any(), any(), any()) } returns Result.success(Unit)
+        val controller = controller()
+        controller.setPlayer("media_player.a")
+        runCurrent()
+
+        controller.playPause()
+        runCurrent()
+
+        coVerify { repo.play("http://ha", "token", "media_player.a") }
+        coVerify(exactly = 0) { repo.seek(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `a failed seek still resumes`() = runTest {
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns
+            Result.success(status(state = "playing", positionSec = 14.0).copy(positionUpdatedAtMs = 0))
+        coEvery { repo.pause(any(), any(), any()) } returns Result.success(Unit)
+        coEvery { repo.seek(any(), any(), any(), any()) } returns Result.failure(Exception("seek not supported"))
+        coEvery { repo.play(any(), any(), any()) } returns Result.success(Unit)
+        val controller = controller()
+        controller.setPlayer("media_player.a")
+        runCurrent()
+        advanceTimeBy(10_000)
+        controller.playPause()
+        advanceTimeBy(5_000)
+        runCurrent()
+
+        controller.playPause()
+        runCurrent()
+
+        coVerify { repo.play("http://ha", "token", "media_player.a") }
+        assertEquals(null, controller.error)
     }
 }

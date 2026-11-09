@@ -185,17 +185,28 @@ class NowPlayingController(
         val now = clock()
         val wasPlaying = current.isPlaying
         val position = current.positionAt(now)
+        // Music Assistant resumes from its last saved position, which can be a second or two before
+        // where the track actually stopped, so resume from the stop position Tangible held instead.
+        val resumeAt = stoppedAt?.takeIf { !wasPlaying && it.trackKey == current.trackKey }?.positionSec
         // Pausing: this is where the track stops. Resuming: let the player report again.
         stoppedAt = if (wasPlaying && position != null) StoppedAt(current.trackKey, position) else null
         command(
             optimistic = current.copy(
                 state = if (wasPlaying) "paused" else "playing",
-                positionSec = position,
+                positionSec = resumeAt ?: position,
                 positionUpdatedAtMs = now
             ),
             expect = { it.isPlaying != wasPlaying }
         ) { url, token, id ->
-            if (wasPlaying) repository.pause(url, token, id) else repository.play(url, token, id)
+            when {
+                wasPlaying -> repository.pause(url, token, id)
+                resumeAt != null -> {
+                    // If the seek fails, still resume, just from wherever Music Assistant has it.
+                    repository.seek(url, token, id, resumeAt)
+                    repository.play(url, token, id)
+                }
+                else -> repository.play(url, token, id)
+            }
         }
     }
 
