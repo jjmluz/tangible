@@ -594,7 +594,8 @@ class MainActivity : ComponentActivity() {
         val albumId = spotifyAlbumId
         if (albumId != null && !isWritingMode) {
             // Every music tag plays on the default player, from a scan or a tap in the collection.
-            playOnMusicAssistant(albumId, selectedMaPlayerId)
+            val preview = savedTag?.let { AlbumPreview(it.title, it.subtitle.ifBlank { null }, it.imageUrl) }
+            playOnMusicAssistant(albumId, selectedMaPlayerId, preview)
             return
         }
 
@@ -706,7 +707,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun playOnMusicAssistant(spotifyAlbumId: String, playerId: String?) {
+    private fun playOnMusicAssistant(spotifyAlbumId: String, playerId: String?, preview: AlbumPreview? = null) {
         if (haServerUrl.isBlank() || haAccessToken.isBlank()) {
             Toast.makeText(this, "Set up Music Assistant in Settings first", Toast.LENGTH_LONG).show()
             return
@@ -715,7 +716,7 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "Pick a Music Assistant player in Settings", Toast.LENGTH_LONG).show()
             return
         }
-        nowPlaying.playbackStarting(playerId)
+        nowPlaying.playbackStarting(playerId, preview)
         openNowPlayingRequest++
         val volume = maDefaultVolume
         lifecycleScope.launch {

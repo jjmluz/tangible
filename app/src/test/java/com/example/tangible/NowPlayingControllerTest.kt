@@ -373,4 +373,46 @@ class NowPlayingControllerTest {
         coVerify { repo.play("http://ha", "token", "media_player.a") }
         assertEquals(null, controller.error)
     }
+
+    @Test
+    fun `while an album starts, its cover and details replace the previous track`() = runTest {
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns
+            Result.success(status(state = "playing", contentId = "track/old").copy(title = "Old song", artworkUrl = "old.jpg"))
+        val controller = controller()
+        controller.setPlayer("media_player.a")
+        runCurrent()
+
+        controller.playbackStarting("media_player.a", AlbumPreview("Hansa Session", "CHVRCHES", "hansa.jpg"))
+        assertEquals("Hansa Session", controller.status!!.title)
+        assertEquals("CHVRCHES", controller.status!!.artist)
+        assertEquals("hansa.jpg", controller.status!!.artworkUrl)
+
+        // Polls still showing the old track are ignored while starting.
+        controller.playbackStarted(Result.success(Unit))
+        advanceTimeBy(1_000)
+        assertEquals("Hansa Session", controller.status!!.title)
+
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns Result.success(
+            status(state = "playing", contentId = "track/new", positionSec = 0.0).copy(title = "Miracle", artworkUrl = "ma.jpg")
+        )
+        advanceTimeBy(400)
+        runCurrent()
+        assertFalse(controller.isStarting)
+        assertEquals("Miracle", controller.status!!.title)
+        assertEquals("ma.jpg", controller.status!!.artworkUrl)
+    }
+
+    @Test
+    fun `without a preview the previous track is cleared while starting`() = runTest {
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns
+            Result.success(status(state = "playing", contentId = "track/old").copy(title = "Old song"))
+        val controller = controller()
+        controller.setPlayer("media_player.a")
+        runCurrent()
+
+        controller.playbackStarting("media_player.a")
+
+        assertEquals(null, controller.status!!.title)
+        assertTrue(controller.isStarting)
+    }
 }

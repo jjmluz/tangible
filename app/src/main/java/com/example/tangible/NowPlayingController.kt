@@ -21,6 +21,9 @@ import kotlin.math.abs
  * player reports the same thing, polling quickly in the meantime. If the player never gets there,
  * the real state is shown after a timeout.
  */
+/** What Tangible knows about an album from its tag, shown while the album starts. */
+data class AlbumPreview(val title: String, val artist: String?, val artworkUrl: String?)
+
 class NowPlayingController(
     private val repository: HomeAssistantRepository,
     private val scope: CoroutineScope,
@@ -153,13 +156,25 @@ class NowPlayingController(
     }
 
     /** Called when a scan or the play button asks Music Assistant to play on [entityId]. */
-    fun playbackStarting(entityId: String) {
+    fun playbackStarting(entityId: String, preview: AlbumPreview? = null) {
         setPlayer(entityId)
         error = null
         isStarting = true
         // Done once the player is playing something new, or the same track from the top (rescanning
         // the album that's already playing).
         val before = status?.contentId
+        // Until then, show the album being started rather than whatever the player last played.
+        status = PlayerStatus(
+            entityId = entityId,
+            name = status?.name ?: entityId,
+            state = "idle",
+            title = preview?.title,
+            artist = preview?.artist,
+            artworkUrl = preview?.artworkUrl,
+            volume = status?.volume,
+            contentId = before
+        )
+        stoppedAt = null
         expectation = Expectation(
             matches = { it.isPlaying && (it.contentId != before || (it.positionAt(clock()) ?: 0.0) < 5.0) },
             deadlineMs = clock() + startTimeoutMs,
