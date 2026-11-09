@@ -21,26 +21,35 @@ isn't published on the Play Store.
   player. A mini player sits above the collection while something is loaded.
 - **Default volume** (optional): the player is set to this volume right before an album starts.
 
-### Movies (being refactored next)
+### Movies: streaming apps on a Google TV, through Home Assistant
 
-- Tags look like `tangible://movie?tmdb_id=<id>&r=<region>&<service>=<type>:<id>…`, built from
-  TMDB and the Streaming Availability API.
-- Movies open on this phone or on a Google TV (found on the network and launched over ADB).
-- Each movie tag can override its service and output with **Edit tag**.
+- **Writing a tag:** search for the movie (TMDB). Tangible looks up where it's included in a
+  subscription in Portugal (Streaming Availability API) and offers Netflix, Disney+, HBO Max and
+  Prime Video, plus Stremio for anything with an IMDb ID. The most preferred one is preselected,
+  in that order, and you can pick another. The tag holds that one service:
+  `tangible://movie?tmdb=<id>&<service>=<content id>`.
+- **Playing:** scanning the tag, or tapping it in the collection, asks Home Assistant to open the
+  movie's link on your TV with the
+  [Android TV Remote](https://www.home-assistant.io/integrations/androidtv_remote/) integration
+  (`media_player.play_media`). The streaming app comes to the front on that movie.
 
 ## Setup
 
-1. **Home Assistant + Music Assistant:** Music Assistant installed in Home Assistant, with your
-   Spotify account added in Music Assistant.
-2. **In Tangible**, open Settings → Music Assistant:
-   - Server URL: your Home Assistant address, e.g. `http://homeassistant.local:8123`.
-   - Long-lived access token: create one in Home Assistant under Profile → Security.
-   - Pick a player (or a player group), and optionally a default volume.
+1. **Home Assistant:**
+   - Music: Music Assistant installed, with your Spotify account added in Music Assistant.
+   - Movies: the Android TV Remote integration set up for your Google TV.
+2. **In Tangible**, open Settings:
+   - Home Assistant → Connection: your Home Assistant address, e.g.
+     `http://homeassistant.local:8123`, and a long-lived access token (create one in Home Assistant
+     under Profile → Security).
+   - Music → Music Assistant: pick a player (or a player group), and optionally a default volume.
+   - Movies → TV: pick your TV.
 3. **Android 15+:** if Tangible shows "NFC tags can't open Tangible", tap **Allow**. Android lets
    you block apps from opening on an NFC scan, and a blocked scan only brings the app to the front
    without playing.
 
-Music tags written before the Music Assistant change don't work any more; write them again.
+Tags in older formats don't work any more: music tags from before the Music Assistant change, and
+movie tags from before the Home Assistant change. Write them again.
 
 ## Building and installing
 

@@ -14,17 +14,19 @@ It's a personal project. It won't be published on the Play Store, so backwards c
 - Users stick NFC tags to their physical media.
 - They use the app to write what that media is to the tag:
   - Music: `tangible://play?spotify_album=<spotify album id>`
-  - Movies: `tangible://movie?tmdb_id=<id>&r=<region>&<service key>=<type>:<id>…`
-- Scanning a tag (or tapping it in the collection) plays it on the default output set in Settings.
+  - Movies: `tangible://movie?tmdb=<TMDB id>&<service key>=<content id>`
+- Scanning a tag (or tapping it in the collection) plays it on the player or TV set in Settings.
 
 ## How it works today
+
+Everything plays through Home Assistant's REST API with a long-lived token
+(`data/HomeAssistantRepository.kt`). The URL and token are in Settings → Home Assistant.
 
 ### Music (Music Assistant only)
 
 - Album search uses Discogs; the Spotify Web API (client credentials) only maps a Discogs result
   to a Spotify album ID when writing a tag.
-- Playback goes through Home Assistant's REST API with a long-lived token
-  (`data/HomeAssistantRepository.kt`):
+- Playback uses the Music Assistant integration:
   - Players: `POST /api/template` with `integration_entities('music_assistant')`.
   - Play: `music_assistant.play_media` with `media_id: spotify://album/<id>`, `enqueue: replace`.
   - Controls: `media_player.*` services; switching players: `music_assistant.transfer_queue`.
@@ -34,11 +36,25 @@ It's a personal project. It won't be published on the Play Store, so backwards c
 - `NowPlayingController` polls the player every 2 s while the app is visible and sends controls.
 - There's no Sonos, Apple Music, YouTube Music, Spotify App Remote or local playback any more.
 
-### Movies (next to refactor)
+### Movies (Android TV Remote only)
 
-- TMDB + Streaming Availability build the tag; playback is on this device or a Google TV
-  (`ChromecastDiscovery`, launched over ADB with `AdbRepository`).
-- Movie tags still have Edit tag (per-tag service/output) and a play button.
+- Movie search uses TMDB. The Streaming Availability API (region fixed to PT) gives each service's
+  link when writing a tag; `MovieService` (`data/MovieTag.kt`) pulls the content ID out of it.
+- Services, in preference order: Netflix (`nf`), Disney+ (`dp`), HBO Max (`mx`), Prime Video
+  (`pv`), Stremio (`sm`, IMDb ID, always offered). Only subscription availability counts, not
+  rent, buy or add-on channels.
+- A tag holds one service, picked on the write screen (the most preferred is preselected).
+- Playback: `media_player.play_media` with `media_content_type: url` on the TV picked in
+  Settings → Movies → TV. TVs are listed with `integration_entities('androidtv_remote')`.
+- Links that open on the TV (tested on a Google TV Streamer):
+  - Netflix: `https://www.netflix.com/title/<id>?source=30` (without `source=30` it doesn't open the title)
+  - Disney+: `https://www.disneyplus.com/browse/entity-<uuid>`
+  - HBO Max: `https://play.hbomax.com/movie/<uuid>`
+  - Prime Video: `https://app.primevideo.com/detail?gti=amzn1.dv.gti.<uuid>`
+  - Stremio: `stremio:///detail/movie/<imdb id>/<imdb id>`
+- Like music, a tap plays: no per-tag outputs, no play buttons, no Edit tag.
+- There's no ADB, no network discovery and no playback on the phone any more. Android TV Remote
+  doesn't report playback state, so there's no Now Playing for movies.
 
 ## Music Assistant / Sonos quirks (learned the hard way)
 
@@ -57,8 +73,9 @@ It's a personal project. It won't be published on the Play Store, so backwards c
 ## Known issues
 
 - The Home Assistant token is stored in plain SharedPreferences.
-- Old settings from removed features (Sonos, Qobuz, selected service) are left in
-  SharedPreferences and are unused.
+- Old settings from removed features (Sonos, Qobuz, selected service, Chromecast, region, movie
+  providers) are left in SharedPreferences and are unused.
+- `MainNavigationTest` (instrumented) is out of date and isn't run.
 
 ## Secrets
 
