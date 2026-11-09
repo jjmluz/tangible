@@ -65,6 +65,56 @@ class HomeAssistantRepositoryTest {
     }
 
     @Test
+    fun `fetchTvs lists the Android TV Remote media players sorted by name`() = runBlocking {
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """[{"entity_id":"media_player.living_room_tv","name":"Living Room TV","state":"on"},
+                   {"entity_id":"media_player.bedroom_tv","name":"Bedroom TV","state":"off"}]"""
+            )
+        )
+
+        val tvs = repository.fetchTvs(baseUrl, "token").getOrThrow()
+
+        assertEquals(
+            listOf(
+                TvDevice("media_player.bedroom_tv", "Bedroom TV"),
+                TvDevice("media_player.living_room_tv", "Living Room TV")
+            ),
+            tvs
+        )
+        val request = server.takeRequest()
+        assertEquals("/api/template", request.path)
+        val template = Gson().fromJson(request.body.readUtf8(), JsonObject::class.java)["template"].asString
+        assertTrue(template.contains("integration_entities('androidtv_remote')"))
+    }
+
+    @Test
+    fun `openOnTv plays the link as a url on the TV`() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("[]"))
+
+        val result = repository.openOnTv(
+            baseUrl, "token", "media_player.living_room_tv", "https://www.netflix.com/title/80175798?source=30"
+        )
+
+        assertTrue(result.isSuccess)
+        val request = server.takeRequest()
+        assertEquals("/api/services/media_player/play_media", request.path)
+        assertEquals("Bearer token", request.getHeader("Authorization"))
+        val body = Gson().fromJson(request.body.readUtf8(), JsonObject::class.java)
+        assertEquals("media_player.living_room_tv", body["entity_id"].asString)
+        assertEquals("url", body["media_content_type"].asString)
+        assertEquals("https://www.netflix.com/title/80175798?source=30", body["media_content_id"].asString)
+    }
+
+    @Test
+    fun `openOnTv fails without a request when no TV is selected`() = runBlocking {
+        val result = repository.openOnTv(baseUrl, "token", "", "https://www.netflix.com/title/1?source=30")
+
+        assertTrue(result.isFailure)
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
     fun `playSpotifyAlbum calls music_assistant play_media with a Spotify album uri`() = runBlocking {
         server.enqueue(MockResponse().setResponseCode(200).setBody("[]"))
 

@@ -21,6 +21,12 @@ data class MusicAssistantPlayer(
     val state: String = ""
 )
 
+/** A TV exposed by Home Assistant's Android TV Remote integration. */
+data class TvDevice(
+    val entityId: String,
+    val name: String
+)
+
 /** What a player is doing right now, read from its Home Assistant media_player state. */
 data class PlayerStatus(
     val entityId: String,
@@ -64,9 +70,10 @@ data class PlayerStatus(
 }
 
 /**
- * Talks to Music Assistant through Home Assistant's REST API, using a long-lived access token.
- * Playback goes through the `music_assistant.play_media` service, so Music Assistant handles
+ * Talks to Home Assistant's REST API, using a long-lived access token.
+ * Music goes through the `music_assistant.play_media` service, so Music Assistant handles
  * the streaming provider (Spotify) and the speakers, including groups.
+ * Movies open on a TV as a deep link, through the Android TV Remote integration.
  */
 class HomeAssistantRepository(
     private val client: OkHttpClient = OkHttpClient.Builder()
@@ -79,13 +86,45 @@ class HomeAssistantRepository(
     private val tag = "HomeAssistantRepository"
     private val json = "application/json".toMediaType()
 
-    /**
-     * Lists the media players that belong to the Music Assistant integration. HA's REST API has
-     * no entity-registry endpoint, so this renders a template that uses `integration_entities`.
-     */
+    /** Lists the media players that belong to the Music Assistant integration. */
     suspend fun fetchPlayers(baseUrl: String, token: String): Result<List<MusicAssistantPlayer>> =
+        fetchMediaPlayers(baseUrl, token, "music_assistant") { entityId, name, state ->
+            MusicAssistantPlayer(entityId, name, state)
+        }.map { players -> players.sortedBy { it.name.lowercase() } }
+
+    /** Lists the TVs that belong to the Android TV Remote integration. */
+    suspend fun fetchTvs(baseUrl: String, token: String): Result<List<TvDevice>> =
+        fetchMediaPlayers(baseUrl, token, "androidtv_remote") { entityId, name, _ ->
+            TvDevice(entityId, name)
+        }.map { tvs -> tvs.sortedBy { it.name.lowercase() } }
+
+    /**
+     * Opens a deep link (e.g. a Netflix title URL) on the TV. The streaming app that handles the
+     * link comes to the front on that title.
+     */
+    suspend fun openOnTv(baseUrl: String, token: String, entityId: String, url: String): Result<Unit> {
+        if (entityId.isBlank()) {
+            return Result.failure(IllegalArgumentException("No TV selected"))
+        }
+        return callService(baseUrl, token, "media_player", "play_media", retryOnNetworkError = true) {
+            addProperty("entity_id", entityId)
+            addProperty("media_content_type", "url")
+            addProperty("media_content_id", url)
+        }
+    }
+
+    /**
+     * HA's REST API has no entity-registry endpoint, so this renders a template that uses
+     * `integration_entities` to find one integration's media players.
+     */
+    private suspend fun <T> fetchMediaPlayers(
+        baseUrl: String,
+        token: String,
+        integration: String,
+        create: (entityId: String, name: String, state: String) -> T
+    ): Result<List<T>> =
         call(baseUrl, token) { url ->
-            val body = JsonObject().apply { addProperty("template", PLAYERS_TEMPLATE) }
+            val body = JsonObject().apply { addProperty("template", mediaPlayersTemplate(integration)) }
             val request = authorized(url + "/api/template", token)
                 .post(body.toString().toRequestBody(json))
                 .build()
@@ -94,12 +133,12 @@ class HomeAssistantRepository(
                 array.mapNotNull { element ->
                     val obj = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
                     val entityId = obj.get("entity_id")?.asString ?: return@mapNotNull null
-                    MusicAssistantPlayer(
-                        entityId = entityId,
-                        name = obj.get("name")?.takeUnless { it.isJsonNull }?.asString ?: entityId,
-                        state = obj.get("state")?.takeUnless { it.isJsonNull }?.asString ?: ""
+                    create(
+                        entityId,
+                        obj.get("name")?.takeUnless { it.isJsonNull }?.asString ?: entityId,
+                        obj.get("state")?.takeUnless { it.isJsonNull }?.asString ?: ""
                     )
-                }.sortedBy { it.name.lowercase() }
+                }
             }
         }
 
@@ -265,9 +304,9 @@ class HomeAssistantRepository(
     class HomeAssistantException(message: String) : IOException(message)
 
     companion object {
-        private val PLAYERS_TEMPLATE = """
+        private fun mediaPlayersTemplate(integration: String) = """
             {%- set ns = namespace(players=[]) -%}
-            {%- for e in integration_entities('music_assistant') if e.startswith('media_player.') -%}
+            {%- for e in integration_entities('$integration') if e.startswith('media_player.') -%}
             {%- set ns.players = ns.players + [{'entity_id': e, 'name': state_attr(e, 'friendly_name') or e, 'state': states(e)}] -%}
             {%- endfor -%}
             {{ ns.players | tojson }}
@@ -283,7 +322,7 @@ class HomeAssistantRepository(
 
         internal fun describeError(code: Int, body: String): String = when (code) {
             401 -> "Home Assistant rejected the access token (401)"
-            404 -> "Not found (404). Is Music Assistant set up in Home Assistant, and does the player still exist?"
+            404 -> "Not found (404). Is the integration set up in Home Assistant, and does the player or TV still exist?"
             else -> {
                 val message = runCatching {
                     Gson().fromJson(body, JsonObject::class.java)?.get("message")?.asString
