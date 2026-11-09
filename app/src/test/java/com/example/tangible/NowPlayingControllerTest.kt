@@ -87,9 +87,11 @@ class NowPlayingControllerTest {
 
     @Test
     fun `switching while idle just shows the other player`() = runTest {
-        coEvery { repo.fetchPlayerStatus(any(), any(), "media_player.a") } returns Result.success(status(state = "idle"))
+        // Nothing loaded on either player.
+        coEvery { repo.fetchPlayerStatus(any(), any(), "media_player.a") } returns
+            Result.success(PlayerStatus("media_player.a", "A", "idle"))
         coEvery { repo.fetchPlayerStatus(any(), any(), "media_player.b") } returns
-            Result.success(status(id = "media_player.b", state = "idle"))
+            Result.success(PlayerStatus("media_player.b", "B", "idle"))
         val controller = controller()
         controller.setPlayer("media_player.a")
         runCurrent()
@@ -223,5 +225,85 @@ class NowPlayingControllerTest {
 
         assertFalse(controller.isStarting)
         assertEquals("Not found (404)", controller.error)
+    }
+
+    // Replays a real trace from a Sonos player through Music Assistant: playing from 0:14, paused
+    // at about 0:35; HA then reported "idle" at 0:34, then "idle" at 0:14 with a fresh timestamp.
+    @Test
+    fun `pausing holds the position the track stopped at`() = runTest {
+        val t0 = testScheduler.currentTime
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns
+            Result.success(status(state = "playing", positionSec = 14.0).copy(positionUpdatedAtMs = t0))
+        coEvery { repo.pause(any(), any(), any()) } returns Result.success(Unit)
+        val controller = controller()
+        controller.setPlayer("media_player.a")
+        runCurrent()
+
+        advanceTimeBy(21_000)
+        controller.playPause()
+        assertEquals(35.0, controller.status!!.positionAt(testScheduler.currentTime)!!, 0.01)
+
+        val pausedAt = testScheduler.currentTime + 400
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns Result.success(
+            status(state = "idle", positionSec = 34.0).copy(positionUpdatedAtMs = pausedAt - 900, stateChangedAtMs = pausedAt)
+        )
+        advanceTimeBy(500)
+        runCurrent()
+        assertEquals("idle", controller.status!!.state)
+        assertEquals(35.0, controller.status!!.positionAt(testScheduler.currentTime)!!, 0.01)
+
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns Result.success(
+            status(state = "idle", positionSec = 14.0).copy(positionUpdatedAtMs = pausedAt, stateChangedAtMs = pausedAt)
+        )
+        controller.refresh()
+        assertEquals(35.0, controller.status!!.positionAt(testScheduler.currentTime + 10_000)!!, 0.01)
+    }
+
+    @Test
+    fun `a pause from another app is placed at the moment the player stopped`() = runTest {
+        val t0 = testScheduler.currentTime
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns
+            Result.success(status(state = "playing", positionSec = 14.0).copy(positionUpdatedAtMs = t0))
+        val controller = controller()
+        controller.setPlayer("media_player.a")
+        runCurrent()
+
+        // Paused elsewhere 20 s in; Tangible only notices on a later poll, with a bogus position.
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns Result.success(
+            status(state = "idle", positionSec = 14.0).copy(positionUpdatedAtMs = t0 + 20_000, stateChangedAtMs = t0 + 20_000)
+        )
+        advanceTimeBy(21_500)
+        controller.refresh()
+
+        assertEquals(34.0, controller.status!!.positionSec!!, 0.01)
+    }
+
+    @Test
+    fun `the held position is dropped when the track plays again or changes`() = runTest {
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns
+            Result.success(status(state = "playing", positionSec = 14.0).copy(positionUpdatedAtMs = 0))
+        coEvery { repo.pause(any(), any(), any()) } returns Result.success(Unit)
+        val controller = controller()
+        controller.setPlayer("media_player.a")
+        runCurrent()
+        advanceTimeBy(10_000)
+        controller.playPause()
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns
+            Result.success(status(state = "idle", positionSec = 3.0))
+        advanceTimeBy(400)
+        runCurrent()
+        assertEquals(24.0, controller.status!!.positionSec!!, 0.01)
+
+        // Next track while paused: trust what HA reports for the new track.
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns
+            Result.success(status(state = "idle", contentId = "track/2", positionSec = 0.0))
+        controller.refresh()
+        assertEquals(0.0, controller.status!!.positionSec!!, 0.0)
+
+        // Playing again: HA's position is used.
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns
+            Result.success(status(state = "playing", contentId = "track/2", positionSec = 2.0))
+        controller.refresh()
+        assertEquals(2.0, controller.status!!.positionSec!!, 0.0)
     }
 }

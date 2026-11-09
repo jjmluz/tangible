@@ -221,55 +221,23 @@ class HomeAssistantRepositoryTest {
     }
 
     @Test
-    fun `a paused player's stale position is counted forward to when it paused`() = runBlocking {
-        // Position 0 was reported when the track started; the player paused 20.5 s later.
+    fun `fetchPlayerStatus reads when the state last changed and treats idle with a track as active`() = runBlocking {
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
-                """{"entity_id":"media_player.sala","state":"paused",
-                    "last_changed":"2026-11-09T18:00:20.500+00:00",
-                    "attributes":{"media_title":"Graffiti","media_duration":236,"media_position":0,
-                    "media_position_updated_at":"2026-11-09T18:00:00+00:00"}}"""
+                """{"entity_id":"media_player.sala","state":"idle",
+                    "last_changed":"2026-11-09T21:32:50.086+00:00",
+                    "attributes":{"media_title":"Graffiti","media_duration":236,"media_position":14,
+                    "media_position_updated_at":"2026-11-09T21:32:50.070+00:00"}}"""
             )
         )
 
         val status = repository.fetchPlayerStatus(baseUrl, "token", "media_player.sala").getOrThrow()
 
-        val pausedAt = java.time.OffsetDateTime.parse("2026-11-09T18:00:20.500+00:00").toInstant().toEpochMilli()
-        assertEquals(20.5, status.positionSec!!, 0.001)
-        assertEquals(pausedAt, status.positionUpdatedAtMs)
-        // Paused, so it stays put however much later it's read.
-        assertEquals(20.5, status.positionAt(pausedAt + 60_000)!!, 0.001)
-    }
-
-    @Test
-    fun `a paused position reported after the pause is used as is`() = runBlocking {
-        server.enqueue(
-            MockResponse().setResponseCode(200).setBody(
-                """{"entity_id":"media_player.sala","state":"paused",
-                    "last_changed":"2026-11-09T18:00:20+00:00",
-                    "attributes":{"media_title":"Graffiti","media_duration":236,"media_position":21,
-                    "media_position_updated_at":"2026-11-09T18:00:21+00:00"}}"""
-            )
+        assertEquals(
+            java.time.OffsetDateTime.parse("2026-11-09T21:32:50.086+00:00").toInstant().toEpochMilli(),
+            status.stateChangedAtMs
         )
-
-        val status = repository.fetchPlayerStatus(baseUrl, "token", "media_player.sala").getOrThrow()
-
-        assertEquals(21.0, status.positionSec!!, 0.0)
-    }
-
-    @Test
-    fun `a playing player's position is not adjusted`() = runBlocking {
-        server.enqueue(
-            MockResponse().setResponseCode(200).setBody(
-                """{"entity_id":"media_player.sala","state":"playing",
-                    "last_changed":"2026-11-09T18:00:20+00:00",
-                    "attributes":{"media_title":"Graffiti","media_duration":236,"media_position":0,
-                    "media_position_updated_at":"2026-11-09T18:00:00+00:00"}}"""
-            )
-        )
-
-        val status = repository.fetchPlayerStatus(baseUrl, "token", "media_player.sala").getOrThrow()
-
-        assertEquals(0.0, status.positionSec!!, 0.0)
+        assertTrue(status.isActive)
+        assertEquals("Graffiti", status.trackKey)
     }
 }

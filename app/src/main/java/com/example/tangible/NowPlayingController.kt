@@ -56,6 +56,15 @@ class NowPlayingController(
     )
 
     private var expectation: Expectation? = null
+
+    /**
+     * Where the current track stopped. While a track is paused, Music Assistant reports unreliable
+     * positions (a moment after pausing it can send where playback last started, e.g. 0:14 instead
+     * of 0:36), so Tangible works out the stop position itself and holds it until the track plays
+     * again or changes.
+     */
+    private data class StoppedAt(val trackKey: String?, val positionSec: Double)
+    private var stoppedAt: StoppedAt? = null
     private var pollJob: Job? = null
 
     // Bumped around every command, so a poll that was already in flight when the command was sent
@@ -67,6 +76,7 @@ class NowPlayingController(
         playerId = entityId
         status = null
         error = null
+        stoppedAt = null
         clearExpectation()
         entityId?.let(onPlayerChanged)
         refreshSoon()
@@ -97,8 +107,9 @@ class NowPlayingController(
         if (url.isBlank() || token.isBlank()) return
         val startedAt = generation
         repository.fetchPlayerStatus(url, token, id)
-            .onSuccess { fresh ->
+            .onSuccess { reported ->
                 if (startedAt != generation || id != playerId) return@onSuccess
+                val fresh = holdStoppedPosition(reported)
                 val pending = expectation
                 if (pending != null) {
                     if (pending.matches(fresh) || clock() >= pending.deadlineMs) {
@@ -116,6 +127,29 @@ class NowPlayingController(
                     errorIsFromPoll = true
                 }
             }
+    }
+
+    /** Replaces the position of a stopped track with where it actually stopped, when that's known. */
+    private fun holdStoppedPosition(fresh: PlayerStatus): PlayerStatus {
+        if (fresh.isPlaying || !fresh.hasMedia) {
+            stoppedAt = null
+            return fresh
+        }
+        val held = stoppedAt?.takeIf { it.trackKey == fresh.trackKey }
+            ?: stopPositionOf(status, fresh)?.let { StoppedAt(fresh.trackKey, it) }
+            ?: return fresh // e.g. the app opened on an already paused track: HA's position is all there is
+        stoppedAt = held
+        return fresh.copy(positionSec = held.positionSec, positionUpdatedAtMs = clock())
+    }
+
+    /** If [previous] was this track playing, where it was when [fresh] says it stopped. */
+    private fun stopPositionOf(previous: PlayerStatus?, fresh: PlayerStatus): Double? {
+        if (previous == null || !previous.isPlaying || previous.trackKey != fresh.trackKey) return null
+        val stoppedAtMs = fresh.stateChangedAtMs
+            ?.takeIf { previous.positionUpdatedAtMs == null || it >= previous.positionUpdatedAtMs }
+            ?.coerceAtMost(clock())
+            ?: clock()
+        return previous.positionAt(stoppedAtMs)
     }
 
     /** Called when a scan or the play button asks Music Assistant to play on [entityId]. */
@@ -150,10 +184,13 @@ class NowPlayingController(
         val current = status ?: return
         val now = clock()
         val wasPlaying = current.isPlaying
+        val position = current.positionAt(now)
+        // Pausing: this is where the track stops. Resuming: let the player report again.
+        stoppedAt = if (wasPlaying && position != null) StoppedAt(current.trackKey, position) else null
         command(
             optimistic = current.copy(
                 state = if (wasPlaying) "paused" else "playing",
-                positionSec = current.positionAt(now),
+                positionSec = position,
                 positionUpdatedAtMs = now
             ),
             expect = { it.isPlaying != wasPlaying }
@@ -174,6 +211,7 @@ class NowPlayingController(
 
     fun seek(positionSec: Double) {
         val current = status ?: return
+        if (!current.isPlaying) stoppedAt = StoppedAt(current.trackKey, positionSec)
         command(
             optimistic = current.copy(positionSec = positionSec, positionUpdatedAtMs = clock()),
             expect = { fresh -> fresh.positionAt(clock())?.let { abs(it - positionSec) < 3.0 } ?: false }

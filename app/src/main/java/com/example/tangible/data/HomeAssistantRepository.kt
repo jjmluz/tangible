@@ -37,13 +37,20 @@ data class PlayerStatus(
     val volume: Float? = null,
     val isMuted: Boolean = false,
     /** The current track's ID, e.g. `spotify--abc://track/<id>`; changes when the track does. */
-    val contentId: String? = null
+    val contentId: String? = null,
+    /** When the state (playing, paused, idle…) last changed, in epoch millis. */
+    val stateChangedAtMs: Long? = null
 ) {
     val isPlaying: Boolean get() = state == "playing"
     val isAvailable: Boolean get() = state != "unavailable" && state != "off"
     val hasMedia: Boolean get() = !title.isNullOrBlank()
-    /** Something is loaded and can be resumed or paused. */
-    val isActive: Boolean get() = hasMedia && (state == "playing" || state == "paused")
+    /**
+     * Something is loaded and can be resumed or paused. Some Music Assistant players (Sonos) report
+     * a paused track as "idle", so idle with a track loaded counts too.
+     */
+    val isActive: Boolean get() = hasMedia && (state == "playing" || state == "paused" || state == "idle")
+    /** Identifies the current track, to tell when it changes. */
+    val trackKey: String? get() = contentId ?: title
 
     /** HA only reports the position when it changes, so add the time elapsed since then while playing. */
     fun positionAt(nowMs: Long): Double? {
@@ -189,32 +196,18 @@ class HomeAssistantRepository(
         val entityId = obj.get("entity_id").asString
         // Music Assistant sets an absolute image URL; other players get HA's relative proxy path.
         val picture = str("entity_picture")?.let { if (it.startsWith("http")) it else baseUrl + it }
-        val state = obj.get("state")?.asString ?: "unknown"
-        val duration = num("media_duration")
-        var position = num("media_position")
-        var positionUpdatedAt = parseTime(str("media_position_updated_at"))
-        // HA only refreshes the position now and then. When a player pauses, the reported position
-        // can be from before the pause (even the start of the track), so count forward from that
-        // update to the moment the state changed to paused.
-        val stateChangedAt = parseTime(obj.get("last_changed")?.takeUnless { it.isJsonNull }?.asString)
-        if (state == "paused" && position != null && positionUpdatedAt != null &&
-            stateChangedAt != null && stateChangedAt > positionUpdatedAt
-        ) {
-            val played = position + (stateChangedAt - positionUpdatedAt) / 1000.0
-            position = duration?.let { played.coerceAtMost(it) } ?: played
-            positionUpdatedAt = stateChangedAt
-        }
         return PlayerStatus(
             entityId = entityId,
             name = str("friendly_name") ?: entityId,
-            state = state,
+            state = obj.get("state")?.asString ?: "unknown",
             title = str("media_title"),
             artist = str("media_artist"),
             album = str("media_album_name"),
             artworkUrl = picture,
-            durationSec = duration,
-            positionSec = position,
-            positionUpdatedAtMs = positionUpdatedAt,
+            durationSec = num("media_duration"),
+            positionSec = num("media_position"),
+            positionUpdatedAtMs = parseTime(str("media_position_updated_at")),
+            stateChangedAtMs = parseTime(obj.get("last_changed")?.takeUnless { it.isJsonNull }?.asString),
             volume = num("volume_level")?.toFloat(),
             isMuted = attrs.get("is_volume_muted")?.takeUnless { it.isJsonNull }?.asBoolean ?: false,
             contentId = str("media_content_id")
