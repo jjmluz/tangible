@@ -1,2 +1,60 @@
-# tangible
-Physical Media -> NFC -> Digital Media
+# Tangible
+
+Physical media → NFC → digital media.
+
+Stick an NFC tag on a vinyl, CD or DVD, write it with Tangible, and scanning it later plays that
+album or movie on your speakers or TV. It's a personal Android app (Kotlin, Jetpack Compose) and
+isn't published on the Play Store.
+
+## How it works
+
+### Music: Spotify through Music Assistant
+
+- **Writing a tag:** search for the album (Discogs), Tangible finds it on Spotify and writes
+  `tangible://play?spotify_album=<id>` to the tag.
+- **Playing:** scanning the tag, or tapping it in the collection, asks
+  [Music Assistant](https://music-assistant.io) to play the album on your default player, through
+  Home Assistant's `music_assistant.play_media` action. To play on several speakers, create a
+  player group in Music Assistant and pick it as the default player.
+- **Now Playing:** opens after you start an album. It shows the cover, title and progress, and has
+  play/pause, previous/next, seek, volume, and a player switcher that moves the queue to another
+  player. A mini player sits above the collection while something is loaded.
+- **Default volume** (optional): the player is set to this volume right before an album starts.
+
+### Movies (being refactored next)
+
+- Tags look like `tangible://movie?tmdb_id=<id>&r=<region>&<service>=<type>:<id>…`, built from
+  TMDB and the Streaming Availability API.
+- Movies open on this phone or on a Google TV (found on the network and launched over ADB).
+- Each movie tag can override its service and output with **Edit tag**.
+
+## Setup
+
+1. **Home Assistant + Music Assistant:** Music Assistant installed in Home Assistant, with your
+   Spotify account added in Music Assistant.
+2. **In Tangible**, open Settings → Music Assistant:
+   - Server URL: your Home Assistant address, e.g. `http://homeassistant.local:8123`.
+   - Long-lived access token: create one in Home Assistant under Profile → Security.
+   - Pick a player (or a player group), and optionally a default volume.
+3. **Android 15+:** if Tangible shows "NFC tags can't open Tangible", tap **Allow**. Android lets
+   you block apps from opening on an NFC scan, and a blocked scan only brings the app to the front
+   without playing.
+
+Music tags written before the Music Assistant change don't work any more; write them again.
+
+## Building and installing
+
+Needs JDK 17+ (Android Studio's bundled JBR works).
+
+```bash
+./gradlew :app:testDebugUnitTest
+./gradlew :app:assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+Over wireless debugging, if adb doesn't find the phone, look it up and connect directly:
+
+```bash
+dns-sd -B _adb-tls-connect._tcp local.
+adb connect <phone-ip>:<port>
+```
