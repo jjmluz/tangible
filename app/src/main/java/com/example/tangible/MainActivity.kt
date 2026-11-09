@@ -45,30 +45,26 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Brush
-import com.example.tangible.data.AdbRepository
-import com.example.tangible.data.ChromecastDevice
-import com.example.tangible.data.ChromecastDiscovery
 import com.example.tangible.data.DiscogsRepository
 import com.example.tangible.data.DiscogsSearchResult
 import com.example.tangible.data.HomeAssistantRepository
-import com.example.tangible.data.MovieProvider
-import com.example.tangible.data.MovieStreamingResult
+import com.example.tangible.data.MovieOption
+import com.example.tangible.data.MovieTag
 import com.example.tangible.data.MusicAssistantPlayer
 import com.example.tangible.data.SpotifyRepository
 import com.example.tangible.data.StreamingAvailabilityRepository
 import com.example.tangible.data.TagRepository
 import com.example.tangible.data.TmdbMovieResult
 import com.example.tangible.data.TmdbRepository
+import com.example.tangible.data.TvDevice
 import com.example.tangible.ui.MainScreen
 import com.example.tangible.ui.MiniPlayer
 import com.example.tangible.ui.NowPlayingScreen
 import com.example.tangible.ui.SortField
 import com.example.tangible.ui.SortOrder
 import com.example.tangible.ui.ViewMode
-import com.example.tangible.ui.MoviePlayerScreen
-import com.example.tangible.ui.MovieProvidersScreen
-import com.example.tangible.ui.MoviePlayer
-import com.example.tangible.ui.MovieRegionScreen
+import com.example.tangible.ui.HomeAssistantScreen
+import com.example.tangible.ui.MovieTvScreen
 import com.example.tangible.ui.MusicAssistantScreen
 import com.example.tangible.ui.SettingsScreen
 import com.example.tangible.ui.TagWriteInfo
@@ -89,18 +85,7 @@ data class SavedTag(
     val type: String, // "MUSIC" or "MOVIE"
     val url: String,
     val imageUrl: String? = null,
-    val createdAt: Long = System.currentTimeMillis(),
-    val customService: String? = null,
-    val customOutputId: String? = null
-)
-
-private val STREAMING_PACKAGES = mapOf(
-    "netflix.com" to "com.netflix.ninja",
-    "primevideo.com" to "com.amazon.amazonvideo.livingroom",
-    "disneyplus.com" to "com.disney.disneyplus",
-    "play.max.com" to "com.wbd.stream",
-    "tv.apple.com" to "com.apple.atve.androidtv.appletv",
-    "skyshowtime.com" to "com.skyshowtime.skyshowtime.google"
+    val createdAt: Long = System.currentTimeMillis()
 )
 
 class MainActivity : ComponentActivity() {
@@ -117,11 +102,6 @@ class MainActivity : ComponentActivity() {
     private val prefs by lazy { getSharedPreferences("tangible_prefs", MODE_PRIVATE) }
     private val tagRepository by lazy { TagRepository(prefs) }
     private val gson = Gson()
-    private var chromecastDevices by mutableStateOf<List<ChromecastDevice>>(emptyList())
-    private var isChromecastRefreshing by mutableStateOf(false)
-    private var selectedChromecastId by mutableStateOf<String?>(null)
-    private var selectedChromecastName by mutableStateOf<String?>(null)
-    private var selectedChromecastHost: String? = null
     private var haServerUrl by mutableStateOf("")
     private var haAccessToken by mutableStateOf("")
     private var selectedMaPlayerId by mutableStateOf<String?>(null)
@@ -130,9 +110,11 @@ class MainActivity : ComponentActivity() {
     private var maPlayers by mutableStateOf<List<MusicAssistantPlayer>>(emptyList())
     private var isMaRefreshing by mutableStateOf(false)
     private var maError by mutableStateOf<String?>(null)
-    private var selectedMoviePlayer by mutableStateOf(MoviePlayer.THIS_DEVICE)
-    private var region by mutableStateOf("US")
-    private var movieProviders by mutableStateOf<List<MovieProvider>>(emptyList())
+    /** The TV movies open on, from Home Assistant's Android TV Remote integration. */
+    private var selectedTvId by mutableStateOf<String?>(null)
+    private var tvs by mutableStateOf<List<TvDevice>>(emptyList())
+    private var isTvRefreshing by mutableStateOf(false)
+    private var tvError by mutableStateOf<String?>(null)
     private var hasShownWelcomeWizard by mutableStateOf(false)
 
     // Sorting
@@ -152,8 +134,6 @@ class MainActivity : ComponentActivity() {
     private val clientId = BuildConfig.SPOTIFY_CLIENT_ID
     private val clientSecret = BuildConfig.SPOTIFY_CLIENT_SECRET
     private val spotifyRepository by lazy { SpotifyRepository(clientId, clientSecret) }
-    private val chromecastDiscovery by lazy { ChromecastDiscovery(this) }
-    private val adbRepository by lazy { AdbRepository(this) }
     private val homeAssistantRepository by lazy { HomeAssistantRepository() }
     private val nowPlaying by lazy {
         NowPlayingController(
@@ -211,16 +191,11 @@ class MainActivity : ComponentActivity() {
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
 
         // Load settings
-        selectedChromecastId = prefs.getString("selected_chromecast_id", null)
-        selectedChromecastName = prefs.getString("selected_chromecast_name", null)
-        selectedChromecastHost = prefs.getString("selected_chromecast_host", null)
         haServerUrl = prefs.getString("ha_server_url", "") ?: ""
         haAccessToken = prefs.getString("ha_access_token", "") ?: ""
         selectedMaPlayerId = prefs.getString("selected_ma_player_id", null)
         maDefaultVolume = prefs.getInt("ma_default_volume", -1).takeIf { it in 0..100 }
-        val moviePlayerValue = prefs.getString("selected_movie_player", MoviePlayer.THIS_DEVICE.name)
-        selectedMoviePlayer = MoviePlayer.entries.find { it.name == moviePlayerValue } ?: MoviePlayer.THIS_DEVICE
-        region = prefs.getString("region", "US") ?: "US"
+        selectedTvId = prefs.getString("selected_tv_id", null)
         hasShownWelcomeWizard = prefs.getBoolean("has_shown_welcome_wizard", false)
 
         // Load sort settings
@@ -230,9 +205,8 @@ class MainActivity : ComponentActivity() {
         movieSortOrder = SortOrder.valueOf(prefs.getString("movie_sort_order", SortOrder.ASCENDING.name) ?: SortOrder.ASCENDING.name)
         collectionViewMode = ViewMode.valueOf(prefs.getString("collection_view_mode", ViewMode.LIST.name) ?: ViewMode.LIST.name)
 
-        loadMovieProviders()
-        loadChromecastDevices()
         loadMaPlayers()
+        loadTvs()
         nowPlaying.setPlayer(prefs.getString("now_playing_player_id", null) ?: selectedMaPlayerId)
         savedTags = tagRepository.loadAll()
 
@@ -247,28 +221,8 @@ class MainActivity : ComponentActivity() {
                     TangibleApp(
                         savedTags = savedTags,
                         onPlay = { tag -> playTagUrl(tag) },
-                        onUpdateTag = { tag ->
-                            tagRepository.update(tag)
-                            savedTags = tagRepository.loadAll()
-                        },
                         isWritingMode = isWritingMode,
                         writeError = writeError,
-                        chromecastDevices = chromecastDevices,
-                        selectedChromecastId = selectedChromecastId,
-                        onChromecastDeviceSelected = { id ->
-                            selectedChromecastId = id
-                            prefs.edit().putString("selected_chromecast_id", id).apply()
-                            chromecastDevices.firstOrNull { it.id == id }?.let { device ->
-                                selectedChromecastName = device.name
-                                selectedChromecastHost = device.host
-                                prefs.edit()
-                                    .putString("selected_chromecast_name", device.name)
-                                    .putString("selected_chromecast_host", device.host)
-                                    .apply()
-                            }
-                        },
-                        onRefreshChromecast = { refreshChromecastDevices() },
-                        isChromecastRefreshing = isChromecastRefreshing,
                         haServerUrl = haServerUrl,
                         onHaServerUrlChange = { url ->
                             haServerUrl = url
@@ -299,11 +253,15 @@ class MainActivity : ComponentActivity() {
                         maError = maError,
                         isNfcTagLaunchBlocked = isNfcTagLaunchBlocked,
                         onFixNfcTagLaunch = { openNfcTagLaunchSettings() },
-                        selectedMoviePlayer = selectedMoviePlayer,
-                        onMoviePlayerSelected = {
-                            selectedMoviePlayer = it
-                            prefs.edit().putString("selected_movie_player", it.name).apply()
+                        tvs = tvs,
+                        selectedTvId = selectedTvId,
+                        onTvSelected = { entityId ->
+                            selectedTvId = entityId
+                            prefs.edit().putString("selected_tv_id", entityId).apply()
                         },
+                        onRefreshTvs = { refreshTvs() },
+                        isTvRefreshing = isTvRefreshing,
+                        tvError = tvError,
                         onStartWriting = { info ->
                             Log.d("Tangible", "onStartWriting: url=${info.url}")
                             dataToWrite = info.url
@@ -319,26 +277,10 @@ class MainActivity : ComponentActivity() {
                         },
                         onSearchAlbums = { query -> discogsRepository.searchAlbums(query) },
                         onSearchMovies = { query -> tmdbRepository.searchMovies(query) },
-                        onGetMovieStreaming = { tmdbId -> streamingRepository.getMovieStreamingResult(tmdbId, region) },
-                        selectedRegion = region,
-                        onRegionSelected = { newRegion ->
-                            if (newRegion != region) {
-                                region = newRegion
-                                prefs.edit().putString("region", newRegion).apply()
-                                movieProviders = emptyList()
-                                saveMovieProviders(emptyList())
-                                prefs.edit().remove("movie_providers").apply()
-                            }
-                        },
+                        onGetMovieOptions = { tmdbId -> streamingRepository.getMovieOptions(tmdbId) },
                         onAlbumSelected = { discogsAlbum ->
                             spotifyRepository.searchAlbums(discogsAlbum.title).firstOrNull()?.id
                         },
-                        movieProviders = movieProviders,
-                        onMovieProvidersChanged = { providers ->
-                            movieProviders = providers
-                            saveMovieProviders(providers)
-                        },
-                        onGetServicesForRegion = { reg -> streamingRepository.getServicesForRegion(reg) },
                         onDeleteTags = { deleteTags(it) },
                         hasShownWelcomeWizard = hasShownWelcomeWizard,
                         onWelcomeWizardShown = {
@@ -383,32 +325,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun saveMovieProviders(providers: List<MovieProvider>) {
-        prefs.edit().putString("movie_providers", gson.toJson(providers)).apply()
-    }
-
-    private fun loadMovieProviders() {
-        val json = prefs.getString("movie_providers", null)
-        movieProviders = if (json != null) {
-            val type = object : TypeToken<List<MovieProvider>>() {}.type
-            gson.fromJson(json, type)
-        } else {
-            emptyList()
-        }
-    }
-
-    private fun saveChromecastDevices(devices: List<ChromecastDevice>) {
-        prefs.edit().putString("cached_chromecast_devices", gson.toJson(devices)).apply()
-    }
-
-    private fun loadChromecastDevices() {
-        val json = prefs.getString("cached_chromecast_devices", null)
-        if (json != null) {
-            val type = object : TypeToken<List<ChromecastDevice>>() {}.type
-            chromecastDevices = gson.fromJson(json, type)
-        }
-    }
-
     private fun loadMaPlayers() {
         val json = prefs.getString("cached_ma_players", null) ?: return
         val type = object : TypeToken<List<MusicAssistantPlayer>>() {}.type
@@ -437,14 +353,31 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun refreshChromecastDevices() {
-        if (isChromecastRefreshing) return
-        isChromecastRefreshing = true
+    private fun loadTvs() {
+        val json = prefs.getString("cached_tvs", null) ?: return
+        val type = object : TypeToken<List<TvDevice>>() {}.type
+        tvs = runCatching { gson.fromJson<List<TvDevice>>(json, type) }.getOrNull() ?: emptyList()
+    }
+
+    private fun refreshTvs() {
+        if (isTvRefreshing) return
+        if (haServerUrl.isBlank() || haAccessToken.isBlank()) {
+            tvError = "Enter your Home Assistant URL and access token first."
+            return
+        }
+        isTvRefreshing = true
+        tvError = null
         lifecycleScope.launch {
-            val devices = chromecastDiscovery.discoverDevices()
-            chromecastDevices = devices
-            saveChromecastDevices(devices)
-            isChromecastRefreshing = false
+            homeAssistantRepository.fetchTvs(haServerUrl, haAccessToken)
+                .onSuccess { found ->
+                    tvs = found
+                    prefs.edit().putString("cached_tvs", gson.toJson(found)).apply()
+                    if (found.isEmpty()) {
+                        tvError = "No TVs found. Is the Android TV Remote integration set up in Home Assistant?"
+                    }
+                }
+                .onFailure { e -> tvError = e.message ?: e.javaClass.simpleName }
+            isTvRefreshing = false
         }
     }
 
@@ -506,7 +439,6 @@ class MainActivity : ComponentActivity() {
 
         Log.d("Tangible", "Handling intent: action=$action, data=$data, isWritingMode=$isWritingMode")
 
-        // Find saved tag for custom settings if not provided
         val savedTag = customTag ?: savedTags.find { it.url == dataString }
 
         if (isWritingMode) {
@@ -523,45 +455,19 @@ class MainActivity : ComponentActivity() {
         }
 
         var spotifyAlbumId: String? = null
-        var movieToPlay: String? = null
+        var movie: MovieOption? = null
 
         fun parseTangibleUri(uri: Uri) {
             if (uri.scheme == "tangible" && (uri.host == "play" || uri.host == null)) {
                 spotifyAlbumId = uri.getQueryParameter(SPOTIFY_ALBUM_PARAM)?.takeIf { it.isNotBlank() }
-            } else if (uri.scheme == "tangible" && uri.host == "movie") {
-                val typePriority = listOf("s", "f", "r", "b")
-                val enabledProviders = movieProviders.filter { it.isEnabled }
-                val candidates = StreamingAvailabilityRepository.ALL_SERVICE_KEYS
-                    .mapNotNull { key ->
-                        val encoded = uri.getQueryParameter(key) ?: return@mapNotNull null
-                        val providerId = StreamingAvailabilityRepository.getProviderId(key) ?: return@mapNotNull null
-                        val resolved = StreamingAvailabilityRepository.resolveService(key, encoded) ?: return@mapNotNull null
-                        Triple(key, providerId, resolved)
-                    }
-
-                val customServiceKey = savedTag?.customService
-                movieToPlay = if (customServiceKey != null) {
-                    candidates.find { it.first == customServiceKey }?.third?.url
-                } else if (movieProviders.isNotEmpty()) {
-                    val enabledIds = enabledProviders.map { it.id }
-                    candidates
-                        .filter { it.second in enabledIds }
-                        .sortedWith(compareBy(
-                            { enabledIds.indexOf(it.second) },
-                            { typePriority.indexOf(it.third.typeCode).let { i -> if (i < 0) Int.MAX_VALUE else i } }
-                        ))
-                        .firstOrNull()?.third?.url
-                } else {
-                    candidates
-                        .sortedBy { typePriority.indexOf(it.third.typeCode).let { i -> if (i < 0) Int.MAX_VALUE else i } }
-                        .firstOrNull()?.third?.url
-                }
+            } else {
+                movie = MovieTag.parse(uri)
             }
         }
 
         data?.let { parseTangibleUri(it) }
 
-        if (spotifyAlbumId == null && movieToPlay == null) {
+        if (spotifyAlbumId == null && movie == null) {
             val rawMsgs = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES)
             rawMsgs?.forEach {
                 val msg = it as NdefMessage
@@ -571,23 +477,9 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        if (movieToPlay != null && !isWritingMode) {
-            val effectiveMoviePlayer = when {
-                savedTag?.customOutputId == "THIS_DEVICE" -> MoviePlayer.THIS_DEVICE
-                savedTag?.customOutputId?.startsWith("CHROMECAST:") == true -> MoviePlayer.GOOGLE_TV
-                else -> selectedMoviePlayer
-            }
-            val effectiveChromecastId = if (savedTag?.customOutputId?.startsWith("CHROMECAST:") == true) {
-                savedTag.customOutputId.removePrefix("CHROMECAST:")
-            } else {
-                selectedChromecastId
-            }
-
-            if (effectiveMoviePlayer == MoviePlayer.GOOGLE_TV) {
-                playMovieOnGoogleTv(movieToPlay!!, effectiveChromecastId)
-            } else {
-                playMovie(movieToPlay!!)
-            }
+        val movieOption = movie
+        if (movieOption != null && !isWritingMode) {
+            playOnTv(movieOption, savedTag?.title)
             return
         }
 
@@ -600,116 +492,36 @@ class MainActivity : ComponentActivity() {
         }
 
         Log.d("Tangible", "No media found or in writing mode. isWritingMode=$isWritingMode")
+        if (!isWritingMode && data?.scheme == "tangible") {
+            Toast.makeText(this, "This tag is in an old format. Write it again.", Toast.LENGTH_LONG).show()
+        }
     }
 
-    private fun playMovieOnGoogleTv(url: String, customDeviceId: String? = null) {
-        val host = if (customDeviceId != null) {
-            chromecastDevices.find { it.id == customDeviceId }?.host
-        } else {
-            chromecastDevices.firstOrNull { it.id == selectedChromecastId }?.host ?: selectedChromecastHost
-        }
-        
-        if (host == null) {
-            Toast.makeText(this, "Please select a Google TV device in Settings", Toast.LENGTH_LONG).show()
+    /** Opens the movie on the TV picked in Settings, in the streaming app the tag was written for. */
+    private fun playOnTv(movie: MovieOption, title: String?) {
+        if (haServerUrl.isBlank() || haAccessToken.isBlank()) {
+            Toast.makeText(this, "Set up Home Assistant in Settings first", Toast.LENGTH_LONG).show()
             return
         }
-        val uri = Uri.parse(url)
-        val packageName: String
-        val tvUrl: String
-        if (uri.scheme == "stremio") {
-            packageName = "com.stremio.one"
-            // Mobile format: stremio://detail/movie/tt1234567
-            // TV format:     stremio:///detail/movie/tt1234567/tt1234567
-            val type = uri.pathSegments.getOrNull(0) ?: "movie"
-            val imdbId = uri.pathSegments.getOrNull(1) ?: uri.lastPathSegment ?: ""
-            tvUrl = "stremio:///detail/$type/$imdbId/$imdbId"
-        } else {
-            val urlHost = uri.host?.lowercase() ?: ""
-            packageName = STREAMING_PACKAGES.entries.firstOrNull { urlHost.endsWith(it.key) }?.value ?: ""
-            
-            // For Prime Video, try the ASIN directly first as GTI might cause error 9345 on some TV versions
-            val asin = if (urlHost.contains("primevideo.com")) {
-                uri.getQueryParameter("asin") ?: uri.lastPathSegment?.takeIf { it.matches(Regex("[A-Z0-9]{10,}")) }
-            } else null
-            
-            if (asin != null) {
-                lifecycleScope.launch {
-                    val tvAsinUrl = "https://app.primevideo.com/detail?asin=$asin"
-                    val ok = adbRepository.launchUri(host, tvAsinUrl, packageName, forceStop = true)
-                    if (!ok) {
-                        // Fallback to GTI if direct ASIN fails
-                        val resolved = StreamingAvailabilityRepository.resolveGtiUrl(asin) ?: url
-                        adbRepository.launchUri(host, resolved, packageName, forceStop = true)
-                    }
-                }
-                return
-            }
-            tvUrl = url
+        val tvId = selectedTvId
+        if (tvId == null) {
+            Toast.makeText(this, "Pick a TV in Settings", Toast.LENGTH_LONG).show()
+            return
         }
+        val tvName = tvs.find { it.entityId == tvId }?.name ?: "the TV"
+        val what = title?.takeIf { it.isNotBlank() } ?: "the movie"
+        Toast.makeText(this, "Opening $what in ${movie.service.displayName} on $tvName…", Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
-            Toast.makeText(this@MainActivity, "Opening movie on TV…", Toast.LENGTH_SHORT).show()
-            val extras = if (packageName == "com.netflix.ninja") mapOf("source" to "30") else emptyMap()
-            val component = if (packageName == "com.netflix.ninja") "com.netflix.ninja/.MainActivity" else ""
-            val ok = adbRepository.launchUri(host, tvUrl, packageName, extras, component, forceStop = true)
-            if (!ok) {
-                Toast.makeText(
-                    this@MainActivity,
-                    "Could not open movie. Enable ADB debugging in Developer Options on your Google TV.",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-        }
-    }
-
-    private fun playMovie(url: String) {
-        val parsed = Uri.parse(url)
-        val asin = if (parsed.host == "app.primevideo.com") {
-            // URL is either https://app.primevideo.com/detail?asin=... or https://app.primevideo.com/detail/ASIN
-            parsed.getQueryParameter("asin")
-                ?: parsed.lastPathSegment?.takeIf { it.matches(Regex("[A-Z0-9]{10,}")) }
-        } else if (parsed.host == "www.primevideo.com" || parsed.host == "primevideo.com") {
-            parsed.lastPathSegment?.takeIf { it.matches(Regex("[A-Z0-9]{10,}")) }
-        } else null
-        Log.d("Tangible", "playMovie: url=$url asin=$asin")
-        if (asin != null) {
-            lifecycleScope.launch {
-                val resolved = StreamingAvailabilityRepository.resolveGtiUrl(asin) ?: url
-                Log.d("Tangible", "playMovie: resolved=$resolved")
-                doPlayMovie(resolved)
-            }
-            return
-        }
-        doPlayMovie(url)
-    }
-
-    private fun doPlayMovie(url: String) {
-        val uri = Uri.parse(url)
-        val targetPackage = if (uri.scheme == "stremio") {
-            "com.stremio.one"
-        } else {
-            val host = uri.host?.lowercase() ?: ""
-            STREAMING_PACKAGES.entries.firstOrNull { host.endsWith(it.key) }?.value
-        }
-        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            targetPackage?.let { setPackage(it) }
-        }
-        try {
-            startActivity(intent)
-        } catch (e: ActivityNotFoundException) {
-            try {
-                startActivity(Intent(Intent.ACTION_VIEW, uri).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
-            } catch (e2: Exception) {
-                Toast.makeText(this, "No app found to open this streaming service", Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: Exception) {
-            Toast.makeText(this, "No app found to open this streaming service", Toast.LENGTH_SHORT).show()
+            homeAssistantRepository.openOnTv(haServerUrl, haAccessToken, tvId, movie.tvLink)
+                .onFailure { e ->
+                    Toast.makeText(this@MainActivity, "Couldn't open the movie on $tvName: ${e.message}", Toast.LENGTH_LONG).show()
+                }
         }
     }
 
     private fun playOnMusicAssistant(spotifyAlbumId: String, playerId: String?, preview: AlbumPreview? = null) {
         if (haServerUrl.isBlank() || haAccessToken.isBlank()) {
-            Toast.makeText(this, "Set up Music Assistant in Settings first", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Set up Home Assistant in Settings first", Toast.LENGTH_LONG).show()
             return
         }
         if (playerId == null) {
@@ -824,14 +636,8 @@ class MainActivity : ComponentActivity() {
 fun TangibleApp(
     savedTags: List<SavedTag>,
     onPlay: (SavedTag) -> Unit,
-    onUpdateTag: (SavedTag) -> Unit,
     isWritingMode: Boolean,
     writeError: String?,
-    chromecastDevices: List<ChromecastDevice>,
-    selectedChromecastId: String?,
-    onChromecastDeviceSelected: (String) -> Unit,
-    onRefreshChromecast: () -> Unit,
-    isChromecastRefreshing: Boolean,
     haServerUrl: String = "",
     onHaServerUrlChange: (String) -> Unit = {},
     haAccessToken: String = "",
@@ -846,19 +652,18 @@ fun TangibleApp(
     maError: String? = null,
     isNfcTagLaunchBlocked: Boolean = false,
     onFixNfcTagLaunch: () -> Unit = {},
-    selectedMoviePlayer: MoviePlayer,
-    onMoviePlayerSelected: (MoviePlayer) -> Unit,
+    tvs: List<TvDevice> = emptyList(),
+    selectedTvId: String? = null,
+    onTvSelected: (String) -> Unit = {},
+    onRefreshTvs: () -> Unit = {},
+    isTvRefreshing: Boolean = false,
+    tvError: String? = null,
     onStartWriting: (TagWriteInfo) -> Unit,
     onCancelWriting: () -> Unit,
     onSearchAlbums: suspend (String) -> List<DiscogsSearchResult>,
     onSearchMovies: suspend (String) -> List<TmdbMovieResult>,
-    onGetMovieStreaming: suspend (Int) -> MovieStreamingResult,
-    selectedRegion: String,
-    onRegionSelected: (String) -> Unit,
+    onGetMovieOptions: suspend (Int) -> List<MovieOption>,
     onAlbumSelected: suspend (DiscogsSearchResult) -> String?,
-    movieProviders: List<MovieProvider>,
-    onMovieProvidersChanged: (List<MovieProvider>) -> Unit,
-    onGetServicesForRegion: suspend (String) -> List<MovieProvider>,
     onDeleteTags: (Set<String>) -> Unit,
     hasShownWelcomeWizard: Boolean,
     onWelcomeWizardShown: () -> Unit,
@@ -881,6 +686,7 @@ fun TangibleApp(
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val isHaConfigured = haServerUrl.isNotBlank() && haAccessToken.isNotBlank()
 
     if (showSuccessDialog) {
         AlertDialog(
@@ -1097,10 +903,6 @@ fun TangibleApp(
                     onMusicSortChange = onMusicSortChange,
                     onMovieSortChange = onMovieSortChange,
                     onViewModeChange = onViewModeChange,
-                    onUpdateTag = onUpdateTag,
-                    onDeleteTag = { onDeleteTags(setOf(it)) },
-                    chromecastDevices = chromecastDevices,
-                    movieProviders = movieProviders,
                     isNfcTagLaunchBlocked = isNfcTagLaunchBlocked,
                     onFixNfcTagLaunch = onFixNfcTagLaunch,
                     bottomContentPadding = if (miniStatus != null) 184.dp else 112.dp
@@ -1156,36 +958,39 @@ fun TangibleApp(
                     onWriteClick = { info -> onStartWriting(info) },
                     onSearchAlbums = onSearchAlbums,
                     onSearchMovies = onSearchMovies,
-                    onGetMovieStreaming = onGetMovieStreaming,
-                    region = selectedRegion,
+                    onGetMovieOptions = onGetMovieOptions,
                     onAlbumSelected = onAlbumSelected
                 )
             }
             composable("settings") {
                 SettingsScreen(
-                    selectedMoviePlayer = selectedMoviePlayer,
-                    selectedRegion = selectedRegion,
+                    onHomeAssistantClick = { navController.navigate("home_assistant") },
                     onMusicAssistantClick = { navController.navigate("music_assistant") },
-                    onMoviePlayerClick = { navController.navigate("movie_player") },
-                    onMovieRegionClick = { navController.navigate("movie_region") },
-                    onMovieProvidersClick = { navController.navigate("movie_providers") },
+                    onMovieTvClick = { navController.navigate("movie_tv") },
                     onExportClick = onExportClick,
                     onImportClick = onImportClick,
                     modifier = Modifier.padding(top = innerPadding.calculateTopPadding()),
-                    isMusicAssistantConfigured = haServerUrl.isNotBlank() && haAccessToken.isNotBlank(),
-                    chromecastDevices = chromecastDevices,
-                    selectedChromecastId = selectedChromecastId,
+                    haServerUrl = haServerUrl,
+                    isHomeAssistantConfigured = isHaConfigured,
                     maPlayers = maPlayers,
-                    selectedMaPlayerId = selectedMaPlayerId
+                    selectedMaPlayerId = selectedMaPlayerId,
+                    tvs = tvs,
+                    selectedTvId = selectedTvId
+                )
+            }
+            composable("home_assistant") {
+                HomeAssistantScreen(
+                    onBackClick = { navController.popBackStack() },
+                    serverUrl = haServerUrl,
+                    onServerUrlChange = onHaServerUrlChange,
+                    accessToken = haAccessToken,
+                    onAccessTokenChange = onHaAccessTokenChange
                 )
             }
             composable("music_assistant") {
                 MusicAssistantScreen(
                     onBackClick = { navController.popBackStack() },
-                    serverUrl = haServerUrl,
-                    onServerUrlChange = onHaServerUrlChange,
-                    accessToken = haAccessToken,
-                    onAccessTokenChange = onHaAccessTokenChange,
+                    isConfigured = isHaConfigured,
                     players = maPlayers,
                     selectedPlayerId = selectedMaPlayerId,
                     onPlayerSelected = onMaPlayerSelected,
@@ -1196,32 +1001,16 @@ fun TangibleApp(
                     onDefaultVolumeChange = onMaDefaultVolumeChange
                 )
             }
-            composable("movie_player") {
-                MoviePlayerScreen(
+            composable("movie_tv") {
+                MovieTvScreen(
                     onBackClick = { navController.popBackStack() },
-                    selectedMoviePlayer = selectedMoviePlayer,
-                    onMoviePlayerSelected = onMoviePlayerSelected,
-                    chromecastDevices = chromecastDevices,
-                    selectedChromecastId = selectedChromecastId,
-                    onChromecastDeviceSelected = onChromecastDeviceSelected,
-                    onRefreshChromecast = onRefreshChromecast,
-                    isChromecastRefreshing = isChromecastRefreshing
-                )
-            }
-            composable("movie_region") {
-                MovieRegionScreen(
-                    onBackClick = { navController.popBackStack() },
-                    selectedRegion = selectedRegion,
-                    onRegionSelected = onRegionSelected
-                )
-            }
-            composable("movie_providers") {
-                MovieProvidersScreen(
-                    onBackClick = { navController.popBackStack() },
-                    region = selectedRegion,
-                    providers = movieProviders,
-                    onProvidersChanged = onMovieProvidersChanged,
-                    onGetServicesForRegion = onGetServicesForRegion
+                    isConfigured = isHaConfigured,
+                    tvs = tvs,
+                    selectedTvId = selectedTvId,
+                    onTvSelected = onTvSelected,
+                    onRefresh = onRefreshTvs,
+                    isRefreshing = isTvRefreshing,
+                    error = tvError
                 )
             }
         }

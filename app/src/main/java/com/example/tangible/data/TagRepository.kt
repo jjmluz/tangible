@@ -26,11 +26,6 @@ class TagRepository(private val prefs: SharedPreferences) {
         prefs.edit().putString(key, gson.toJson(tags)).apply()
     }
 
-    fun update(tag: SavedTag) {
-        val tags = loadAll().map { if (it.id == tag.id) tag else it }
-        prefs.edit().putString(key, gson.toJson(tags)).apply()
-    }
-
     fun exportJson(): String = gson.toJson(loadAll())
 
     fun importJson(json: String): Boolean {

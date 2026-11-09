@@ -2,6 +2,8 @@ package com.example.tangible.ui
 
 import android.net.Uri
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -10,8 +12,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Search
@@ -22,13 +22,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.tangible.SPOTIFY_ALBUM_PARAM
 import com.example.tangible.data.DiscogsSearchResult
-import com.example.tangible.data.MovieStreamingResult
+import com.example.tangible.data.MovieOption
+import com.example.tangible.data.MovieService
+import com.example.tangible.data.MovieTag
 import com.example.tangible.data.TmdbMovieResult
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -43,11 +46,6 @@ data class TagWriteInfo(
     val url: String
 )
 
-data class WriteOption(
-    val id: String,
-    val label: String
-)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WriteTagScreen(
@@ -59,10 +57,7 @@ fun WriteTagScreen(
     onSearchAlbums: suspend (String) -> List<DiscogsSearchResult> = { emptyList() },
     onAlbumSelected: suspend (DiscogsSearchResult) -> String? = { null },
     onSearchMovies: suspend (String) -> List<TmdbMovieResult> = { emptyList() },
-    onGetMovieStreaming: suspend (tmdbId: Int) -> MovieStreamingResult = {
-        MovieStreamingResult(emptyList(), emptySet(), "", 0)
-    },
-    region: String = "US"
+    onGetMovieOptions: suspend (tmdbId: Int) -> List<MovieOption> = { emptyList() }
 ) {
     var tagType by remember { mutableStateOf(TagType.MUSIC) }
 
@@ -72,7 +67,6 @@ fun WriteTagScreen(
     var searchResults by remember { mutableStateOf<List<DiscogsSearchResult>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
     var isLoadingFirstTrack by remember { mutableStateOf(false) }
-    var writeOptionId by remember { mutableStateOf("tangible") }
     var spotifyAlbumId by remember { mutableStateOf<String?>(null) }
     var selectedAlbum by remember { mutableStateOf<DiscogsSearchResult?>(null) }
 
@@ -81,7 +75,9 @@ fun WriteTagScreen(
     var movieSearchResults by remember { mutableStateOf<List<TmdbMovieResult>>(emptyList()) }
     var isSearchingMovies by remember { mutableStateOf(false) }
     var selectedMovie by remember { mutableStateOf<TmdbMovieResult?>(null) }
-    var streamingResult by remember { mutableStateOf<MovieStreamingResult?>(null) }
+    // Where the selected movie can be watched; null until the lookup finishes.
+    var movieOptions by remember { mutableStateOf<List<MovieOption>?>(null) }
+    var selectedService by remember { mutableStateOf<MovieService?>(null) }
     var isLoadingStreaming by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
@@ -121,8 +117,8 @@ fun WriteTagScreen(
         selectedAlbum = null
         selectedMovie = null
         spotifyAlbumId = null
-        streamingResult = null
-        writeOptionId = "tangible"
+        movieOptions = null
+        selectedService = null
         if (tagType == TagType.MUSIC) {
             movieSearchQuery = ""
             movieSearchResults = emptyList()
@@ -132,35 +128,31 @@ fun WriteTagScreen(
         }
     }
 
-    // URL derivation
-    LaunchedEffect(writeOptionId, spotifyAlbumId, streamingResult, tagType) {
-        url = when {
-            writeOptionId == "tangible" -> {
-                if (tagType == TagType.MUSIC) {
-                    spotifyAlbumId?.let { "tangible://play?$SPOTIFY_ALBUM_PARAM=${Uri.encode(it)}" } ?: ""
-                } else {
-                    streamingResult?.tagUrl ?: ""
-                }
+    // The tag's URL
+    LaunchedEffect(tagType, spotifyAlbumId, selectedMovie, movieOptions, selectedService) {
+        url = when (tagType) {
+            TagType.MUSIC -> spotifyAlbumId?.let { "tangible://play?$SPOTIFY_ALBUM_PARAM=${Uri.encode(it)}" } ?: ""
+            TagType.MOVIE -> {
+                val movie = selectedMovie
+                val option = movieOptions?.find { it.service == selectedService }
+                if (movie != null && option != null) MovieTag.build(movie.id, option) else ""
             }
-            writeOptionId.startsWith("direct:") -> {
-                val serviceId = writeOptionId.removePrefix("direct:")
-                streamingResult?.options?.find { it.serviceId == serviceId }?.link ?: ""
-            }
-            else -> ""
         }
     }
 
-    // Fetch streaming availability when a movie is selected
+    // Look up where a movie can be watched when it's selected; the most preferred service is preselected.
     LaunchedEffect(selectedMovie) {
         val movie = selectedMovie
+        movieOptions = null
+        selectedService = null
         if (movie == null) {
-            streamingResult = null
             isLoadingStreaming = false
             return@LaunchedEffect
         }
         isLoadingStreaming = true
-        streamingResult = null
-        streamingResult = onGetMovieStreaming(movie.id)
+        val options = onGetMovieOptions(movie.id)
+        movieOptions = options
+        selectedService = options.firstOrNull()?.service
         isLoadingStreaming = false
     }
 
@@ -205,7 +197,6 @@ fun WriteTagScreen(
                             selectedMovie = null
                             spotifyAlbumId = null
                             url = ""
-                            streamingResult = null
                         } else {
                             onBackClick()
                         }
@@ -226,11 +217,10 @@ fun WriteTagScreen(
                 spotifyAlbumId = spotifyAlbumId,
                 isLoadingFirstTrack = isLoadingFirstTrack,
                 isLoadingStreaming = isLoadingStreaming,
-                streamingResult = streamingResult,
-                region = region,
+                movieOptions = movieOptions,
+                selectedService = selectedService,
+                onServiceSelected = { selectedService = it },
                 url = url,
-                writeOptionId = writeOptionId,
-                onWriteOptionIdChange = { writeOptionId = it },
                 writeError = writeError,
                 isWriting = isWriting,
                 onWriteClick = {
@@ -400,65 +390,17 @@ private fun WriteTagConfirmContent(
     spotifyAlbumId: String?,
     isLoadingFirstTrack: Boolean,
     isLoadingStreaming: Boolean,
-    streamingResult: MovieStreamingResult?,
-    region: String,
+    movieOptions: List<MovieOption>?,
+    selectedService: MovieService?,
+    onServiceSelected: (MovieService) -> Unit,
     url: String,
-    writeOptionId: String,
-    onWriteOptionIdChange: (String) -> Unit,
     writeError: String?,
     onWriteClick: () -> Unit,
     modifier: Modifier = Modifier,
     isWriting: Boolean = false
 ) {
     val isLoading = isLoadingFirstTrack || isLoadingStreaming
-    var showWriteAsHelp by remember { mutableStateOf(false) }
     var showUrlPreview by remember { mutableStateOf(false) }
-
-    val writeOptions = remember(tagType, streamingResult) {
-        val list = mutableListOf(WriteOption("tangible", "Tangible URI"))
-        if (tagType == TagType.MOVIE) {
-            streamingResult?.options?.forEach { opt ->
-                list.add(WriteOption("direct:${opt.serviceId}", "${opt.serviceName} URL"))
-            }
-        }
-        list
-    }
-
-    if (showWriteAsHelp) {
-        AlertDialog(
-            onDismissRequest = { showWriteAsHelp = false },
-            title = { Text("Writing Options") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Column {
-                        Text(
-                            "Tangible URI",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            "The 'smart' option. When scanned, Tangible plays it on your preferred player automatically. Music tags always use this.",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                    Column {
-                        Text(
-                            "Direct Service URL",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            "Movies only. Writes a standard link (e.g., netflix.com). Works on any phone even without Tangible installed.",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showWriteAsHelp = false }) { Text("Got it") }
-            }
-        )
-    }
 
     if (showUrlPreview) {
         AlertDialog(
@@ -494,7 +436,7 @@ private fun WriteTagConfirmContent(
                 ) {
                     CircularProgressIndicator()
                     Text(
-                        if (tagType == TagType.MUSIC) "Looking up the album on Spotify…" else "Fetching streaming availability in $region…",
+                        if (tagType == TagType.MUSIC) "Looking up the album on Spotify…" else "Checking where you can watch it…",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -555,15 +497,15 @@ private fun WriteTagConfirmContent(
                     }
                     if (tagType == TagType.MOVIE) {
                         when {
-                            streamingResult != null && streamingResult.options.isEmpty() ->
+                            movieOptions == null -> Unit
+                            movieOptions.isEmpty() ->
                                 Text(
-                                    "Not available for streaming in $region.",
+                                    "Couldn't find this movie on your streaming services or for Stremio, so it can't be written to a tag.",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = MaterialTheme.colorScheme.error,
                                     textAlign = TextAlign.Center
                                 )
-                            streamingResult != null ->
-                                StreamingServicesCard(streamingResult, region)
+                            else -> MovieServicePicker(movieOptions, selectedService, onServiceSelected)
                         }
                     }
                 }
@@ -585,24 +527,8 @@ private fun WriteTagConfirmContent(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.End
             ) {
-                WriteAsDropdown(
-                    selectedId = writeOptionId,
-                    onSelectedIdChange = onWriteOptionIdChange,
-                    options = writeOptions,
-                    modifier = Modifier.weight(1f)
-                )
-                IconButton(onClick = { showWriteAsHelp = true }) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.HelpOutline,
-                        contentDescription = "Help",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
                 IconButton(onClick = { showUrlPreview = true }) {
                     Icon(
                         imageVector = Icons.Default.Visibility,
@@ -655,95 +581,40 @@ private fun WriteTagConfirmContent(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** Picks the streaming service the tag opens the movie in. */
 @Composable
-private fun WriteAsDropdown(
-    selectedId: String,
-    onSelectedIdChange: (String) -> Unit,
-    options: List<WriteOption>,
-    modifier: Modifier = Modifier
+private fun MovieServicePicker(
+    options: List<MovieOption>,
+    selected: MovieService?,
+    onSelected: (MovieService) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    val currentOption = options.find { it.id == selectedId } ?: options.firstOrNull()
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = !expanded },
-        modifier = modifier
-    ) {
-        OutlinedTextField(
-            value = currentOption?.label ?: "",
-            onValueChange = {},
-            readOnly = true,
-            label = { Text("Write as") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-            modifier = Modifier
-                .menuAnchor()
-                .fillMaxWidth()
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option.label) },
-                    onClick = {
-                        onSelectedIdChange(option.id)
-                        expanded = false
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun StreamingServicesCard(result: MovieStreamingResult, region: String) {
-    val countryName = REGIONS.find { it.first == region }?.second ?: region
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
+        Column(modifier = Modifier.padding(vertical = 12.dp)) {
             Text(
-                "Availability in $countryName",
-                style = MaterialTheme.typography.labelLarge
+                "Open in",
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
-            result.options.forEach { option ->
-                val encoded = option.serviceId in result.encodedServiceIds
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    if (encoded) {
-                        Icon(
-                            Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
+            Column(Modifier.selectableGroup()) {
+                options.forEach { option ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = option.service == selected,
+                                onClick = { onSelected(option.service) },
+                                role = Role.RadioButton
+                            )
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = option.service == selected, onClick = null)
+                        Text(
+                            text = option.service.displayName,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(start = 16.dp)
                         )
-                    } else {
-                        Spacer(modifier = Modifier.size(16.dp))
                     }
-                    val typeLabel = option.allTypes.joinToString(", ") { type ->
-                        type.replaceFirstChar { it.uppercase() }
-                    }
-                    val statusText = if (!encoded) " (tag full — use NTAG216+)" else ""
-                    val displayText = if (option.serviceId == "stremio") {
-                        option.serviceName + statusText
-                    } else {
-                        "${option.serviceName} ($typeLabel)$statusText"
-                    }
-                    Text(
-                        text = displayText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (encoded)
-                            MaterialTheme.colorScheme.onSurface
-                        else
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
             }
         }

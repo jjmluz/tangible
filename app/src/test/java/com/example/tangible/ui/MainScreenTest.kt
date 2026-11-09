@@ -2,12 +2,12 @@ package com.example.tangible.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performClick
 import androidx.compose.runtime.mutableStateOf
 import com.example.tangible.SavedTag
-import com.example.tangible.data.MovieProvider
 import androidx.compose.ui.test.onNodeWithContentDescription
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -62,36 +62,27 @@ class MainScreenTest {
     }
 
     @Test
-    fun `TagDetailsModal for Movie only shows enabled and written services`() {
-        val movieProviders = listOf(
-            MovieProvider("netflix", "Netflix", "url1", isEnabled = true),
-            MovieProvider("prime", "Prime Video", "url2", isEnabled = false),
-            MovieProvider("disney", "Disney+", "url3", isEnabled = true)
-        )
-        // tangible://movie?tmdb_id=123&r=US&nf=s:456&pv=r:789 -> netflix and prime written
-        val tag = SavedTag("1", "Inception", "Christopher Nolan", "MOVIE", "tangible://movie?tmdb_id=123&r=US&nf=s:456&pv=r:789")
+    fun `tapping a movie tag plays it, with no play button or edit dialog`() {
+        val movie = SavedTag("1", "Dune", "2021", "MOVIE", "tangible://movie?tmdb=438631&mx=e7dc7b3a")
+        val played = mutableListOf<String>()
 
         composeTestRule.setContent {
-            TagDetailsModal(
-                tag = tag,
-                onDismiss = {},
-                onUpdate = {},
-                onDelete = {},
-                chromecastDevices = emptyList(),
-                movieProviders = movieProviders
+            MainScreen(
+                tags = listOf(movie),
+                selectedTagIds = emptySet(),
+                onPlay = { played += it.id },
+                onTagClick = {},
+                onTagLongClick = {},
+                viewMode = ViewMode.LIST
             )
         }
 
-        // Expand Service dropdown (initially shows "Default")
-        composeTestRule.onAllNodesWithText("Default")[0].performClick()
+        composeTestRule.onNodeWithText("Movies").performSemanticsAction(SemanticsActions.OnClick)
+        composeTestRule.onNodeWithContentDescription("Play").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Dune").performClick()
 
-        // Only Netflix should be shown.
-        // Prime is disabled.
-        // Disney is enabled but NOT in the tag.
-        composeTestRule.onNodeWithText("Netflix (Subscription)").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Prime Video").assertDoesNotExist()
-        composeTestRule.onNodeWithText("Prime Video (Rent)").assertDoesNotExist()
-        composeTestRule.onNodeWithText("Disney+").assertDoesNotExist()
+        assertEquals(listOf("1"), played)
+        composeTestRule.onNodeWithText("Edit Tag").assertDoesNotExist()
     }
 
     @Test

@@ -91,7 +91,6 @@ dependencies {
     implementation(libs.okhttp.logging)
     implementation(libs.coil.compose)
     implementation("com.google.code.gson:gson:2.10.1")
-    implementation("io.github.mobile-dev-inc:dadb:1.2.7")
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

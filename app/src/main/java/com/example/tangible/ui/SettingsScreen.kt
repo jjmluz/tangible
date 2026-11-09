@@ -22,74 +22,36 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
-import com.example.tangible.data.ChromecastDevice
 import com.example.tangible.data.MusicAssistantPlayer
-
-enum class MoviePlayer(val displayName: String) {
-    THIS_DEVICE("This device"),
-    GOOGLE_TV("Google TV")
-}
-
-val REGIONS = listOf(
-    "AU" to "Australia",
-    "AT" to "Austria",
-    "BE" to "Belgium",
-    "BR" to "Brazil",
-    "CA" to "Canada",
-    "DK" to "Denmark",
-    "FI" to "Finland",
-    "FR" to "France",
-    "DE" to "Germany",
-    "IN" to "India",
-    "IE" to "Ireland",
-    "IT" to "Italy",
-    "JP" to "Japan",
-    "MX" to "Mexico",
-    "NL" to "Netherlands",
-    "NZ" to "New Zealand",
-    "NO" to "Norway",
-    "PL" to "Poland",
-    "PT" to "Portugal",
-    "ES" to "Spain",
-    "SE" to "Sweden",
-    "CH" to "Switzerland",
-    "TR" to "Turkey",
-    "GB" to "United Kingdom",
-    "US" to "United States"
-)
+import com.example.tangible.data.TvDevice
 
 // ─── Main Settings Page ──────────────────────────────────────────────────────
 
 @Composable
 fun SettingsScreen(
-    selectedMoviePlayer: MoviePlayer,
-    selectedRegion: String,
+    onHomeAssistantClick: () -> Unit,
     onMusicAssistantClick: () -> Unit,
-    onMoviePlayerClick: () -> Unit,
-    onMovieRegionClick: () -> Unit,
-    onMovieProvidersClick: () -> Unit,
+    onMovieTvClick: () -> Unit,
     onExportClick: () -> Unit,
     onImportClick: () -> Unit,
     modifier: Modifier = Modifier,
-    isMusicAssistantConfigured: Boolean = false,
-    chromecastDevices: List<ChromecastDevice> = emptyList(),
-    selectedChromecastId: String? = null,
+    haServerUrl: String = "",
+    isHomeAssistantConfigured: Boolean = false,
     maPlayers: List<MusicAssistantPlayer> = emptyList(),
     selectedMaPlayerId: String? = null,
+    tvs: List<TvDevice> = emptyList(),
+    selectedTvId: String? = null,
 ) {
-    val regionName = REGIONS.find { it.first == selectedRegion }?.second ?: selectedRegion
+    val homeAssistantSubtitle = if (isHomeAssistantConfigured) haServerUrl else "Not set up"
 
     val musicAssistantSubtitle = when {
-        !isMusicAssistantConfigured -> "Not set up"
         selectedMaPlayerId == null -> "No player selected"
         else -> maPlayers.find { it.entityId == selectedMaPlayerId }?.name ?: selectedMaPlayerId
     }
 
-    val moviePlayerSubtitle = when (selectedMoviePlayer) {
-        MoviePlayer.GOOGLE_TV -> {
-            chromecastDevices.find { it.id == selectedChromecastId }?.let { "Google TV: ${it.name}" } ?: selectedMoviePlayer.displayName
-        }
-        else -> selectedMoviePlayer.displayName
+    val tvSubtitle = when {
+        selectedTvId == null -> "No TV selected"
+        else -> tvs.find { it.entityId == selectedTvId }?.name ?: selectedTvId
     }
 
     Column(
@@ -100,6 +62,12 @@ fun SettingsScreen(
             .padding(horizontal = 16.dp)
             .padding(top = 8.dp, bottom = 112.dp)
     ) {
+        SectionHeader("Home Assistant")
+        Spacer(Modifier.height(8.dp))
+        SettingsItem("Connection", homeAssistantSubtitle, onHomeAssistantClick)
+
+        Spacer(Modifier.height(24.dp))
+
         SectionHeader("Music")
         Spacer(Modifier.height(8.dp))
         SettingsItem("Music Assistant", musicAssistantSubtitle, onMusicAssistantClick)
@@ -108,11 +76,7 @@ fun SettingsScreen(
 
         SectionHeader("Movies")
         Spacer(Modifier.height(8.dp))
-        SettingsItem("Streaming services", "Manage enabled services", onMovieProvidersClick)
-        Spacer(Modifier.height(8.dp))
-        SettingsItem("Default output", moviePlayerSubtitle, onMoviePlayerClick)
-        Spacer(Modifier.height(8.dp))
-        SettingsItem("Region", regionName, onMovieRegionClick)
+        SettingsItem("TV", tvSubtitle, onMovieTvClick)
 
         Spacer(Modifier.height(24.dp))
 
@@ -170,37 +134,66 @@ private fun SettingsItem(title: String, value: String, onClick: () -> Unit) {
     }
 }
 
-// ─── Music Assistant Sub-page ─────────────────────────────────────────────────
+// ─── Home Assistant Sub-page ──────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MusicAssistantScreen(
+fun HomeAssistantScreen(
     onBackClick: () -> Unit,
     serverUrl: String,
     onServerUrlChange: (String) -> Unit,
     accessToken: String,
     onAccessTokenChange: (String) -> Unit,
-    players: List<MusicAssistantPlayer>,
-    selectedPlayerId: String?,
-    onPlayerSelected: (String) -> Unit,
-    onRefresh: () -> Unit,
-    isRefreshing: Boolean,
-    error: String?,
-    defaultVolume: Int? = null,
-    onDefaultVolumeChange: (Int?) -> Unit = {},
 ) {
-    val isConfigured = serverUrl.isNotBlank() && accessToken.isNotBlank()
-
-    LaunchedEffect(Unit) {
-        if (isConfigured && players.isEmpty() && !isRefreshing) onRefresh()
+    SettingsSubPage(title = "Home Assistant", onBackClick = onBackClick) {
+        Text(
+            text = "Tangible plays everything through Home Assistant: music with Music Assistant, " +
+                "movies with the Android TV Remote integration.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+        )
+        Spacer(Modifier.height(16.dp))
+        OutlinedTextField(
+            value = serverUrl,
+            onValueChange = onServerUrlChange,
+            label = { Text("Server URL") },
+            placeholder = { Text("http://homeassistant.local:8123") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp),
+            singleLine = true
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = accessToken,
+            onValueChange = onAccessTokenChange,
+            label = { Text("Long-lived access token") },
+            supportingText = { Text("Create one in Home Assistant under Profile → Security") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp),
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation()
+        )
+        Spacer(Modifier.height(16.dp))
     }
+}
 
+/** A settings page with a back arrow and scrolling content. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsSubPage(
+    title: String,
+    onBackClick: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        "Music Assistant",
+                        title,
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onBackground
                     )
@@ -219,44 +212,38 @@ fun MusicAssistantScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-        ) {
+                .verticalScroll(rememberScrollState()),
+            content = content
+        )
+    }
+}
+
+// ─── Music Assistant Sub-page ─────────────────────────────────────────────────
+
+@Composable
+fun MusicAssistantScreen(
+    onBackClick: () -> Unit,
+    isConfigured: Boolean,
+    players: List<MusicAssistantPlayer>,
+    selectedPlayerId: String?,
+    onPlayerSelected: (String) -> Unit,
+    onRefresh: () -> Unit,
+    isRefreshing: Boolean,
+    error: String?,
+    defaultVolume: Int? = null,
+    onDefaultVolumeChange: (Int?) -> Unit = {},
+) {
+    LaunchedEffect(Unit) {
+        if (isConfigured && players.isEmpty() && !isRefreshing) onRefresh()
+    }
+
+    SettingsSubPage(title = "Music Assistant", onBackClick = onBackClick) {
             Text(
-                text = "Tags play Spotify albums through Music Assistant, connected via Home Assistant. " +
+                text = "Tags play Spotify albums through Music Assistant. " +
                     "To play on several speakers at once, create a player group in Music Assistant and pick it below.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
-            )
-            Spacer(Modifier.height(16.dp))
-            Text(
-                text = "HOME ASSISTANT",
-                style = MaterialTheme.typography.labelMedium,
-                color = TangiblePurple,
-                modifier = Modifier.padding(horizontal = 20.dp)
-            )
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                value = serverUrl,
-                onValueChange = onServerUrlChange,
-                label = { Text("Server URL") },
-                placeholder = { Text("http://homeassistant.local:8123") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                singleLine = true
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = accessToken,
-                onValueChange = onAccessTokenChange,
-                label = { Text("Long-lived access token") },
-                supportingText = { Text("Create one in Home Assistant under Profile → Security") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation()
             )
             // Above the player list, which can be long.
             Spacer(Modifier.height(24.dp))
@@ -266,7 +253,7 @@ fun MusicAssistantScreen(
                 title = "Player",
                 emptyText = when {
                     error != null -> error
-                    !isConfigured -> "Enter your Home Assistant URL and access token, then tap refresh."
+                    !isConfigured -> "Set up the Home Assistant connection in Settings first."
                     else -> "Tap refresh to load your Music Assistant players."
                 },
                 devices = players.map { it.entityId to it.name },
@@ -285,7 +272,6 @@ fun MusicAssistantScreen(
                 )
             }
             Spacer(Modifier.height(16.dp))
-        }
     }
 }
 
@@ -357,159 +343,55 @@ internal fun DefaultVolumeSection(volume: Int?, onVolumeChange: (Int?) -> Unit) 
 
 private const val DEFAULT_VOLUME_SUGGESTION = 30
 
-// ─── Default player Sub-page ───────────────────────────────────────────────────
+// ─── Movie TV Sub-page ────────────────────────────────────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MoviePlayerScreen(
+fun MovieTvScreen(
     onBackClick: () -> Unit,
-    selectedMoviePlayer: MoviePlayer,
-    onMoviePlayerSelected: (MoviePlayer) -> Unit,
-    chromecastDevices: List<ChromecastDevice>,
-    selectedChromecastId: String?,
-    onChromecastDeviceSelected: (String) -> Unit,
-    onRefreshChromecast: () -> Unit,
-    isChromecastRefreshing: Boolean,
+    isConfigured: Boolean,
+    tvs: List<TvDevice>,
+    selectedTvId: String?,
+    onTvSelected: (String) -> Unit,
+    onRefresh: () -> Unit,
+    isRefreshing: Boolean,
+    error: String?,
 ) {
-    LaunchedEffect(selectedMoviePlayer) {
-        if (selectedMoviePlayer == MoviePlayer.GOOGLE_TV && chromecastDevices.isEmpty() && !isChromecastRefreshing) {
-            onRefreshChromecast()
-        }
+    LaunchedEffect(Unit) {
+        if (isConfigured && tvs.isEmpty() && !isRefreshing) onRefresh()
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "Default output (Movies)",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground)
-            )
-        },
-        containerColor = TangibleBackground
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-        ) {
-            Column(Modifier.selectableGroup()) {
-                MoviePlayer.entries.forEach { player ->
-                    SelectionRow(
-                        label = player.displayName,
-                        selected = player == selectedMoviePlayer,
-                        onClick = { onMoviePlayerSelected(player) }
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                    )
-                }
-            }
-
-            if (selectedMoviePlayer == MoviePlayer.GOOGLE_TV) {
-                Spacer(Modifier.height(24.dp))
-                DeviceSection(
-                    title = "Google TV Device",
-                    emptyText = "No Google TV devices found. Enable ADB debugging in Developer Options on your TV, then tap refresh.",
-                    devices = chromecastDevices.map { it.id to it.name },
-                    subtitles = chromecastDevices.associate { it.id to it.model },
-                    selectedId = selectedChromecastId,
-                    onSelect = onChromecastDeviceSelected,
-                    onRefresh = onRefreshChromecast,
-                    isRefreshing = isChromecastRefreshing
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = "Movies open directly on your Google TV via ADB. Enable \"ADB debugging\" in Developer Options on the TV — on first use, approve the prompt on screen.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp)
-                )
-            }
-
-            Spacer(Modifier.height(16.dp))
-        }
-    }
-}
-
-// ─── Movie Region Sub-page ───────────────────────────────────────────────────
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun MovieRegionScreen(
-    onBackClick: () -> Unit,
-    selectedRegion: String,
-    onRegionSelected: (String) -> Unit,
-) {
-    var pendingRegion by remember { mutableStateOf<String?>(null) }
-
-    if (pendingRegion != null) {
-        AlertDialog(
-            onDismissRequest = { pendingRegion = null },
-            title = { Text("Change region?") },
-            text = { Text("Changing the region will clear your custom movie provider preferences.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    onRegionSelected(pendingRegion!!)
-                    pendingRegion = null
-                }) { Text("Change") }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingRegion = null }) { Text("Cancel") }
-            }
+    SettingsSubPage(title = "TV", onBackClick = onBackClick) {
+        Text(
+            text = "Movie tags open on this TV, in Netflix, Disney+, HBO Max, Prime Video or Stremio. " +
+                "The TV needs the Android TV Remote integration in Home Assistant.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
         )
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "Region (Movies)",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground)
+        Spacer(Modifier.height(16.dp))
+        DeviceSection(
+            title = "TV",
+            emptyText = when {
+                error != null -> error
+                !isConfigured -> "Set up the Home Assistant connection in Settings first."
+                else -> "Tap refresh to load your TVs."
+            },
+            devices = tvs.map { it.entityId to it.name },
+            subtitles = tvs.associate { it.entityId to it.entityId },
+            selectedId = selectedTvId,
+            onSelect = onTvSelected,
+            onRefresh = onRefresh,
+            isRefreshing = isRefreshing
+        )
+        if (error != null && tvs.isNotEmpty()) {
+            Text(
+                text = error,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
             )
-        },
-        containerColor = TangibleBackground
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .selectableGroup()
-        ) {
-            REGIONS.forEach { (code, name) ->
-                SelectionRow(
-                    label = name,
-                    selected = code == selectedRegion,
-                    onClick = { if (code != selectedRegion) pendingRegion = code }
-                )
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                )
-            }
         }
+        Spacer(Modifier.height(16.dp))
     }
 }
 
