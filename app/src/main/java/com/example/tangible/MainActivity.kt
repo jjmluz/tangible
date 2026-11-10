@@ -78,6 +78,10 @@ import kotlinx.coroutines.launch
 /** Music tags look like `tangible://play?spotify_album=<id>`. */
 const val SPOTIFY_ALBUM_PARAM = "spotify_album"
 
+/** The Google TV app and the action its Quick Settings "TV remote" tile uses to open the remote. */
+private const val GOOGLE_TV_PACKAGE = "com.google.android.videos"
+private const val GOOGLE_TV_REMOTE_ACTION = "com.google.android.apps.googletv.ACTION_VIRTUAL_REMOTE"
+
 data class SavedTag(
     val id: String,
     val title: String,
@@ -526,6 +530,19 @@ class MainActivity : ComponentActivity() {
                 .onFailure { e ->
                     Toast.makeText(this@MainActivity, "Couldn't open the movie on $tvName: ${e.message}", Toast.LENGTH_LONG).show()
                 }
+        }
+        openTvRemote()
+    }
+
+    /**
+     * Brings up the Google TV app's remote on the phone, ready for when the movie opens. The app
+     * shows the remote of the TV it was last connected to. Does nothing if the app isn't installed.
+     */
+    private fun openTvRemote() {
+        try {
+            startActivity(Intent(GOOGLE_TV_REMOTE_ACTION).setPackage(GOOGLE_TV_PACKAGE))
+        } catch (e: Exception) {
+            Log.w("Tangible", "Couldn't open the Google TV remote: ${e.message}")
         }
     }
 

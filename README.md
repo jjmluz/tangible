@@ -31,7 +31,8 @@ isn't published on the Play Store.
 - **Playing:** scanning the tag, or tapping it in the collection, asks Home Assistant to open the
   movie's link on your TV with the
   [Android TV Remote](https://www.home-assistant.io/integrations/androidtv_remote/) integration
-  (`media_player.play_media`). The streaming app comes to the front on that movie.
+  (`media_player.play_media`). The streaming app comes to the front on that movie. On the phone,
+  the Google TV app's remote opens at the same time, if the app is installed.
 
 ## Setup
 

@@ -52,6 +52,9 @@ Everything plays through Home Assistant's REST API with a long-lived token
   - HBO Max: `https://play.hbomax.com/movie/<uuid>`
   - Prime Video: `https://app.primevideo.com/detail?gti=amzn1.dv.gti.<uuid>`
   - Stremio: `stremio:///detail/movie/<imdb id>/<imdb id>`
+- At the same time the phone opens the Google TV app's remote (`com.google.android.videos`, action
+  `com.google.android.apps.googletv.ACTION_VIRTUAL_REMOTE`, an undocumented intent found with
+  `dumpsys package`). It's skipped quietly when the app isn't installed.
 - Like music, a tap plays: no per-tag outputs, no play buttons, no Edit tag.
 - There's no ADB, no network discovery and no playback on the phone any more. Android TV Remote
   doesn't report playback state, so there's no Now Playing for movies.
