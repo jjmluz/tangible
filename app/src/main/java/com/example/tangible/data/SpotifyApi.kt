@@ -35,11 +35,15 @@ data class SpotifyAlbumResponse(
 data class SpotifyAlbum(
     @SerializedName("id") val id: String,
     @SerializedName("name") val name: String,
-    @SerializedName("uri") val uri: String,
-    @SerializedName("artists") val artists: List<SpotifyArtist>,
-    @SerializedName("images") val images: List<SpotifyImage>
+    @SerializedName("artists") val artists: List<SpotifyArtist>? = null,
+    // Largest first (640, 300 and 64 px).
+    @SerializedName("images") val images: List<SpotifyImage>? = null,
+    @SerializedName("release_date") val releaseDate: String? = null
 ) {
-    val displayTitle: String get() = "${artists.firstOrNull()?.name ?: "Unknown"} - $name"
+    val artistName: String get() = artists.orEmpty().joinToString(", ") { it.name }
+    val coverUrl: String? get() = images?.firstOrNull()?.url
+    val thumbUrl: String? get() = images?.lastOrNull()?.url
+    val year: String get() = releaseDate.orEmpty().take(4)
 }
 
 data class SpotifyArtist(

@@ -45,17 +45,16 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Brush
-import com.example.tangible.data.DiscogsRepository
-import com.example.tangible.data.DiscogsSearchResult
 import com.example.tangible.data.HomeAssistantRepository
 import com.example.tangible.data.MovieOption
+import com.example.tangible.data.MovieSearchResult
+import com.example.tangible.data.PosterStore
 import com.example.tangible.data.MovieTag
 import com.example.tangible.data.MusicAssistantPlayer
+import com.example.tangible.data.SpotifyAlbum
 import com.example.tangible.data.SpotifyRepository
 import com.example.tangible.data.StreamingAvailabilityRepository
 import com.example.tangible.data.TagRepository
-import com.example.tangible.data.TmdbMovieResult
-import com.example.tangible.data.TmdbRepository
 import com.example.tangible.data.TvDevice
 import com.example.tangible.ui.MainScreen
 import com.example.tangible.ui.MiniPlayer
@@ -74,6 +73,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.File
 
 /** Music tags look like `tangible://play?spotify_album=<id>`. */
 const val SPOTIFY_ALBUM_PARAM = "spotify_album"
@@ -106,6 +106,8 @@ class MainActivity : ComponentActivity() {
     private var dataToWrite: String? = null
     private var pendingTagInfo: TagWriteInfo? = null
     private var savedTags by mutableStateOf<List<SavedTag>>(emptyList())
+    /** The movie posters kept on the phone, by tag ID. */
+    private var posterFiles by mutableStateOf<Map<String, File>>(emptyMap())
 
     // Settings
     private val prefs by lazy { getSharedPreferences("tangible_prefs", MODE_PRIVATE) }
@@ -134,12 +136,11 @@ class MainActivity : ComponentActivity() {
     private var collectionViewMode by mutableStateOf(ViewMode.LIST)
 
     // Repositories
-    private val discogsToken = BuildConfig.DISCOGS_TOKEN
-    private val discogsRepository by lazy { DiscogsRepository(discogsToken) }
-    private val tmdbApiKey = BuildConfig.TMDB_API_KEY
-    private val tmdbRepository by lazy { TmdbRepository(tmdbApiKey) }
     private val streamingApiKey = BuildConfig.STREAMING_AVAILABILITY_API_KEY
     private val streamingRepository by lazy { StreamingAvailabilityRepository(streamingApiKey) }
+    private val posterStore by lazy {
+        PosterStore(File(filesDir, "posters"), prefs, lookUpPosterUrl = { streamingRepository.posterUrl(it) })
+    }
     private val clientId = BuildConfig.SPOTIFY_CLIENT_ID
     private val clientSecret = BuildConfig.SPOTIFY_CLIENT_SECRET
     private val spotifyRepository by lazy { SpotifyRepository(clientId, clientSecret) }
@@ -178,6 +179,7 @@ class MainActivity : ComponentActivity() {
                     val json = inputStream.bufferedReader().readText()
                     if (tagRepository.importJson(json)) {
                         savedTags = tagRepository.loadAll()
+                        syncPosters()
                         Toast.makeText(this@MainActivity, "Collection imported successfully!", Toast.LENGTH_SHORT).show()
                     } else {
                         Toast.makeText(this@MainActivity, "Import failed: Invalid file format", Toast.LENGTH_LONG).show()
@@ -212,6 +214,7 @@ class MainActivity : ComponentActivity() {
         loadTvs()
         nowPlaying.setPlayer(prefs.getString("now_playing_player_id", null) ?: selectedMaPlayerId)
         savedTags = tagRepository.loadAll()
+        syncPosters()
 
         // Only a fresh launch: a recreated activity (rotation, theme change) still has the intent
         // of the last scan, and handling it again would restart the album.
@@ -224,7 +227,10 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     TangibleApp(
-                        savedTags = savedTags,
+                        // Movies show the poster kept on the phone; the tag's own link expires.
+                        savedTags = savedTags.map { tag ->
+                            posterFiles[tag.id]?.let { tag.copy(imageUrl = Uri.fromFile(it).toString()) } ?: tag
+                        },
                         onPlay = { tag -> playTagUrl(tag) },
                         isWritingMode = isWritingMode,
                         writeError = writeError,
@@ -280,12 +286,8 @@ class MainActivity : ComponentActivity() {
                             dataToWrite = null
                             writeError = null
                         },
-                        onSearchAlbums = { query -> discogsRepository.searchAlbums(query) },
-                        onSearchMovies = { query -> tmdbRepository.searchMovies(query) },
-                        onGetMovieOptions = { tmdbId -> streamingRepository.getMovieOptions(tmdbId) },
-                        onAlbumSelected = { discogsAlbum ->
-                            spotifyRepository.searchAlbums(discogsAlbum.title).firstOrNull()?.id
-                        },
+                        onSearchAlbums = { query -> spotifyRepository.searchAlbums(query) },
+                        onSearchMovies = { query -> streamingRepository.searchMovies(query) },
                         onDeleteTags = { deleteTags(it) },
                         hasShownWelcomeWizard = hasShownWelcomeWizard,
                         onWelcomeWizardShown = {
@@ -647,6 +649,7 @@ class MainActivity : ComponentActivity() {
             )
             tagRepository.save(tag)
             savedTags = tagRepository.loadAll()
+            syncPosters()
         }
         isWritingMode = false
         dataToWrite = null
@@ -659,6 +662,19 @@ class MainActivity : ComponentActivity() {
     private fun deleteTags(tagIds: Set<String>) {
         tagRepository.delete(tagIds)
         savedTags = tagRepository.loadAll()
+        syncPosters()
+    }
+
+    /**
+     * Fetches the movie posters that aren't on the phone yet (a new tag, a restored backup, cleared
+     * storage) and drops those of deleted tags. Until a poster arrives, the tag's own link is shown.
+     */
+    private fun syncPosters() {
+        posterFiles = posterStore.stored(savedTags)
+        lifecycleScope.launch {
+            posterStore.sync(savedTags)
+            posterFiles = posterStore.stored(savedTags)
+        }
     }
 }
 
@@ -691,10 +707,8 @@ fun TangibleApp(
     tvError: String? = null,
     onStartWriting: (TagWriteInfo) -> Unit,
     onCancelWriting: () -> Unit,
-    onSearchAlbums: suspend (String) -> List<DiscogsSearchResult>,
-    onSearchMovies: suspend (String) -> List<TmdbMovieResult>,
-    onGetMovieOptions: suspend (Int) -> List<MovieOption>,
-    onAlbumSelected: suspend (DiscogsSearchResult) -> String?,
+    onSearchAlbums: suspend (String) -> List<SpotifyAlbum>,
+    onSearchMovies: suspend (String) -> List<MovieSearchResult>,
     onDeleteTags: (Set<String>) -> Unit,
     hasShownWelcomeWizard: Boolean,
     onWelcomeWizardShown: () -> Unit,
@@ -988,9 +1002,7 @@ fun TangibleApp(
                     },
                     onWriteClick = { info -> onStartWriting(info) },
                     onSearchAlbums = onSearchAlbums,
-                    onSearchMovies = onSearchMovies,
-                    onGetMovieOptions = onGetMovieOptions,
-                    onAlbumSelected = onAlbumSelected
+                    onSearchMovies = onSearchMovies
                 )
             }
             composable("settings") {

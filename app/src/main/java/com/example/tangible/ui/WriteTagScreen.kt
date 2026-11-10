@@ -28,13 +28,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.tangible.SPOTIFY_ALBUM_PARAM
-import com.example.tangible.data.DiscogsSearchResult
 import com.example.tangible.data.MovieOption
+import com.example.tangible.data.MovieSearchResult
 import com.example.tangible.data.MovieService
 import com.example.tangible.data.MovieTag
-import com.example.tangible.data.TmdbMovieResult
+import com.example.tangible.data.SpotifyAlbum
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 enum class TagType { MUSIC, MOVIE }
 
@@ -54,33 +53,24 @@ fun WriteTagScreen(
     writeError: String? = null,
     onTagInfoUpdate: (TagWriteInfo?) -> Unit,
     onWriteClick: (TagWriteInfo) -> Unit,
-    onSearchAlbums: suspend (String) -> List<DiscogsSearchResult> = { emptyList() },
-    onAlbumSelected: suspend (DiscogsSearchResult) -> String? = { null },
-    onSearchMovies: suspend (String) -> List<TmdbMovieResult> = { emptyList() },
-    onGetMovieOptions: suspend (tmdbId: Int) -> List<MovieOption> = { emptyList() }
+    onSearchAlbums: suspend (String) -> List<SpotifyAlbum> = { emptyList() },
+    onSearchMovies: suspend (String) -> List<MovieSearchResult> = { emptyList() }
 ) {
     var tagType by remember { mutableStateOf(TagType.MUSIC) }
 
     // Music state
     var url by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
-    var searchResults by remember { mutableStateOf<List<DiscogsSearchResult>>(emptyList()) }
+    var searchResults by remember { mutableStateOf<List<SpotifyAlbum>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
-    var isLoadingFirstTrack by remember { mutableStateOf(false) }
-    var spotifyAlbumId by remember { mutableStateOf<String?>(null) }
-    var selectedAlbum by remember { mutableStateOf<DiscogsSearchResult?>(null) }
+    var selectedAlbum by remember { mutableStateOf<SpotifyAlbum?>(null) }
 
     // Movie state
     var movieSearchQuery by remember { mutableStateOf("") }
-    var movieSearchResults by remember { mutableStateOf<List<TmdbMovieResult>>(emptyList()) }
+    var movieSearchResults by remember { mutableStateOf<List<MovieSearchResult>>(emptyList()) }
     var isSearchingMovies by remember { mutableStateOf(false) }
-    var selectedMovie by remember { mutableStateOf<TmdbMovieResult?>(null) }
-    // Where the selected movie can be watched; null until the lookup finishes.
-    var movieOptions by remember { mutableStateOf<List<MovieOption>?>(null) }
+    var selectedMovie by remember { mutableStateOf<MovieSearchResult?>(null) }
     var selectedService by remember { mutableStateOf<MovieService?>(null) }
-    var isLoadingStreaming by remember { mutableStateOf(false) }
-
-    val scope = rememberCoroutineScope()
 
     val showConfirmScreen = when (tagType) {
         TagType.MUSIC -> selectedAlbum != null
@@ -92,7 +82,7 @@ fun WriteTagScreen(
         if (!showConfirmScreen || url.isBlank()) null
         else {
             val title = when (tagType) {
-                TagType.MUSIC -> selectedAlbum?.albumName ?: ""
+                TagType.MUSIC -> selectedAlbum?.name ?: ""
                 TagType.MOVIE -> selectedMovie?.title ?: ""
             }
             val subtitle = when (tagType) {
@@ -100,8 +90,8 @@ fun WriteTagScreen(
                 TagType.MOVIE -> selectedMovie?.year ?: ""
             }
             val imageUrl = when (tagType) {
-                TagType.MUSIC -> selectedAlbum?.displayImage
-                TagType.MOVIE -> selectedMovie?.largePosterUrl
+                TagType.MUSIC -> selectedAlbum?.coverUrl
+                TagType.MOVIE -> selectedMovie?.posterUrl
             }
             TagWriteInfo(title = title, subtitle = subtitle, type = tagType, imageUrl = imageUrl, url = url)
         }
@@ -116,8 +106,6 @@ fun WriteTagScreen(
         url = ""
         selectedAlbum = null
         selectedMovie = null
-        spotifyAlbumId = null
-        movieOptions = null
         selectedService = null
         if (tagType == TagType.MUSIC) {
             movieSearchQuery = ""
@@ -129,36 +117,20 @@ fun WriteTagScreen(
     }
 
     // The tag's URL
-    LaunchedEffect(tagType, spotifyAlbumId, selectedMovie, movieOptions, selectedService) {
+    LaunchedEffect(tagType, selectedAlbum, selectedMovie, selectedService) {
         url = when (tagType) {
-            TagType.MUSIC -> spotifyAlbumId?.let { "tangible://play?$SPOTIFY_ALBUM_PARAM=${Uri.encode(it)}" } ?: ""
+            TagType.MUSIC -> selectedAlbum?.let { "tangible://play?$SPOTIFY_ALBUM_PARAM=${Uri.encode(it.id)}" } ?: ""
             TagType.MOVIE -> {
                 val movie = selectedMovie
-                val option = movieOptions?.find { it.service == selectedService }
-                if (movie != null && option != null) MovieTag.build(movie.id, option) else ""
+                val option = movie?.options?.find { it.service == selectedService }
+                if (movie != null && option != null) MovieTag.build(movie.tmdbId, option) else ""
             }
         }
     }
 
-    // Look up where a movie can be watched when it's selected; the most preferred service is preselected.
-    LaunchedEffect(selectedMovie) {
-        val movie = selectedMovie
-        movieOptions = null
-        selectedService = null
-        if (movie == null) {
-            isLoadingStreaming = false
-            return@LaunchedEffect
-        }
-        isLoadingStreaming = true
-        val options = onGetMovieOptions(movie.id)
-        movieOptions = options
-        selectedService = options.firstOrNull()?.service
-        isLoadingStreaming = false
-    }
-
     // Music search debouncing
     LaunchedEffect(searchQuery) {
-        if (searchQuery.length > 2 && !isLoadingFirstTrack) {
+        if (searchQuery.length > 2) {
             isSearching = true
             delay(500)
             searchResults = onSearchAlbums(searchQuery)
@@ -195,7 +167,6 @@ fun WriteTagScreen(
                         if (showConfirmScreen) {
                             selectedAlbum = null
                             selectedMovie = null
-                            spotifyAlbumId = null
                             url = ""
                         } else {
                             onBackClick()
@@ -214,10 +185,7 @@ fun WriteTagScreen(
                 tagType = tagType,
                 selectedAlbum = selectedAlbum,
                 selectedMovie = selectedMovie,
-                spotifyAlbumId = spotifyAlbumId,
-                isLoadingFirstTrack = isLoadingFirstTrack,
-                isLoadingStreaming = isLoadingStreaming,
-                movieOptions = movieOptions,
+                movieOptions = selectedMovie?.options,
                 selectedService = selectedService,
                 onServiceSelected = { selectedService = it },
                 url = url,
@@ -236,22 +204,17 @@ fun WriteTagScreen(
                 onTagTypeChange = { tagType = it },
                 musicSearchQuery = searchQuery,
                 onMusicSearchQueryChange = { searchQuery = it },
-                isSearchingMusic = isSearching || isLoadingFirstTrack,
+                isSearchingMusic = isSearching,
                 musicResults = searchResults,
-                onMusicResultSelected = { result ->
-                    selectedAlbum = result
-                    scope.launch {
-                        isLoadingFirstTrack = true
-                        spotifyAlbumId = onAlbumSelected(result)
-                        isLoadingFirstTrack = false
-                    }
-                },
+                onMusicResultSelected = { selectedAlbum = it },
                 movieSearchQuery = movieSearchQuery,
                 onMovieSearchQueryChange = { movieSearchQuery = it },
                 isSearchingMovies = isSearchingMovies,
                 movieResults = movieSearchResults,
                 onMovieResultSelected = { movie ->
                     selectedMovie = movie
+                    // The most preferred service is preselected.
+                    selectedService = movie.options.firstOrNull()?.service
                 },
                 modifier = Modifier
                     .padding(padding)
@@ -268,13 +231,13 @@ private fun WriteTagSearchContent(
     musicSearchQuery: String,
     onMusicSearchQueryChange: (String) -> Unit,
     isSearchingMusic: Boolean,
-    musicResults: List<DiscogsSearchResult>,
-    onMusicResultSelected: (DiscogsSearchResult) -> Unit,
+    musicResults: List<SpotifyAlbum>,
+    onMusicResultSelected: (SpotifyAlbum) -> Unit,
     movieSearchQuery: String,
     onMovieSearchQueryChange: (String) -> Unit,
     isSearchingMovies: Boolean,
-    movieResults: List<TmdbMovieResult>,
-    onMovieResultSelected: (TmdbMovieResult) -> Unit,
+    movieResults: List<MovieSearchResult>,
+    onMovieResultSelected: (MovieSearchResult) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -327,10 +290,14 @@ private fun WriteTagSearchContent(
                     SearchResultsCard {
                         items(musicResults) { result ->
                             ListItem(
-                                headlineContent = { Text(result.title) },
+                                headlineContent = { Text(result.name) },
+                                supportingContent = {
+                                    val details = listOf(result.artistName, result.year).filter { it.isNotBlank() }
+                                    if (details.isNotEmpty()) Text(details.joinToString(" · "))
+                                },
                                 leadingContent = {
                                     AsyncImage(
-                                        model = result.thumb,
+                                        model = result.thumbUrl,
                                         contentDescription = null,
                                         modifier = Modifier.size(40.dp)
                                     )
@@ -363,7 +330,7 @@ private fun WriteTagSearchContent(
                                 supportingContent = { if (movie.year.isNotBlank()) Text(movie.year) },
                                 leadingContent = {
                                     AsyncImage(
-                                        model = movie.posterUrl,
+                                        model = movie.thumbUrl,
                                         contentDescription = null,
                                         modifier = Modifier
                                             .width(40.dp)
@@ -385,11 +352,8 @@ private fun WriteTagSearchContent(
 @Composable
 private fun WriteTagConfirmContent(
     tagType: TagType,
-    selectedAlbum: DiscogsSearchResult?,
-    selectedMovie: TmdbMovieResult?,
-    spotifyAlbumId: String?,
-    isLoadingFirstTrack: Boolean,
-    isLoadingStreaming: Boolean,
+    selectedAlbum: SpotifyAlbum?,
+    selectedMovie: MovieSearchResult?,
     movieOptions: List<MovieOption>?,
     selectedService: MovieService?,
     onServiceSelected: (MovieService) -> Unit,
@@ -399,7 +363,6 @@ private fun WriteTagConfirmContent(
     modifier: Modifier = Modifier,
     isWriting: Boolean = false
 ) {
-    val isLoading = isLoadingFirstTrack || isLoadingStreaming
     var showUrlPreview by remember { mutableStateOf(false) }
 
     if (showUrlPreview) {
@@ -428,85 +391,62 @@ private fun WriteTagConfirmContent(
                 .fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
-            if (isLoading) {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    CircularProgressIndicator()
-                    Text(
-                        if (tagType == TagType.MUSIC) "Looking up the album on Spotify…" else "Checking where you can watch it…",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            } else {
-                val imageUrl = when (tagType) {
-                    TagType.MUSIC -> selectedAlbum?.displayImage
-                    TagType.MOVIE -> selectedMovie?.largePosterUrl
-                }
-                val title = when (tagType) {
-                    TagType.MUSIC -> selectedAlbum?.albumName ?: ""
-                    TagType.MOVIE -> selectedMovie?.title ?: ""
-                }
-                val subtitle = when (tagType) {
-                    TagType.MUSIC -> selectedAlbum?.artistName ?: ""
-                    TagType.MOVIE -> selectedMovie?.year ?: ""
-                }
+            val imageUrl = when (tagType) {
+                TagType.MUSIC -> selectedAlbum?.coverUrl
+                TagType.MOVIE -> selectedMovie?.posterUrl
+            }
+            val title = when (tagType) {
+                TagType.MUSIC -> selectedAlbum?.name ?: ""
+                TagType.MOVIE -> selectedMovie?.title ?: ""
+            }
+            val subtitle = when (tagType) {
+                TagType.MUSIC -> selectedAlbum?.artistName ?: ""
+                TagType.MOVIE -> selectedMovie?.year ?: ""
+            }
 
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    val imageModifier = if (tagType == TagType.MOVIE) {
-                        Modifier
-                            .width(240.dp)
-                            .height(360.dp)
-                    } else {
-                        Modifier.size(280.dp)
-                    }
-                    AsyncImage(
-                        model = imageUrl,
-                        contentDescription = null,
-                        modifier = imageModifier.clip(RoundedCornerShape(12.dp)),
-                        contentScale = ContentScale.Crop
-                    )
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                val imageModifier = if (tagType == TagType.MOVIE) {
+                    Modifier
+                        .width(240.dp)
+                        .height(360.dp)
+                } else {
+                    Modifier.size(280.dp)
+                }
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = null,
+                    modifier = imageModifier.clip(RoundedCornerShape(12.dp)),
+                    contentScale = ContentScale.Crop
+                )
+                Text(
+                    title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center
+                )
+                if (subtitle.isNotBlank()) {
                     Text(
-                        title,
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        subtitle,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )
-                    if (subtitle.isNotBlank()) {
-                        Text(
-                            subtitle,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                    if (tagType == TagType.MUSIC && spotifyAlbumId == null) {
-                        Text(
-                            "Couldn't find this album on Spotify, so it can't be written to a tag.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                    if (tagType == TagType.MOVIE) {
-                        when {
-                            movieOptions == null -> Unit
-                            movieOptions.isEmpty() ->
-                                Text(
-                                    "Couldn't find this movie on your streaming services or for Stremio, so it can't be written to a tag.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.error,
-                                    textAlign = TextAlign.Center
-                                )
-                            else -> MovieServicePicker(movieOptions, selectedService, onServiceSelected)
-                        }
+                }
+                if (tagType == TagType.MOVIE) {
+                    when {
+                        movieOptions == null -> Unit
+                        movieOptions.isEmpty() ->
+                            Text(
+                                "Couldn't find this movie on your streaming services or for Stremio, so it can't be written to a tag.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                textAlign = TextAlign.Center
+                            )
+                        else -> MovieServicePicker(movieOptions, selectedService, onServiceSelected)
                     }
                 }
             }
@@ -568,7 +508,7 @@ private fun WriteTagConfirmContent(
             } else {
                 Button(
                     onClick = onWriteClick,
-                    enabled = url.isNotBlank() && !isLoading,
+                    enabled = url.isNotBlank(),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier
                         .fillMaxWidth()

@@ -61,12 +61,34 @@ data class MovieOption(val service: MovieService, val contentId: String) {
 }
 
 /**
+ * A movie from a search.
+ *
+ * @param options where it can be watched, most preferred service first; empty when it's on none
+ *   of the services and has no IMDb ID for Stremio.
+ */
+data class MovieSearchResult(
+    val tmdbId: Int,
+    val title: String,
+    val year: String,
+    val thumbUrl: String?,
+    val posterUrl: String?,
+    val options: List<MovieOption>
+)
+
+/**
  * Movie tags look like `tangible://movie?tmdb=<TMDB id>&<service key>=<content id>`, e.g.
  * `tangible://movie?tmdb=398978&nf=80175798`. A tag holds one service, chosen when it's written.
  */
 object MovieTag {
     fun build(tmdbId: Int, option: MovieOption): String =
         "tangible://movie?tmdb=$tmdbId&${option.service.key}=${Uri.encode(option.contentId)}"
+
+    /** The TMDB ID in a movie tag's URL. */
+    fun tmdbId(url: String): Int? {
+        val uri = Uri.parse(url)
+        if (uri.scheme != "tangible" || uri.host != "movie") return null
+        return uri.getQueryParameter("tmdb")?.toIntOrNull()
+    }
 
     fun parse(uri: Uri): MovieOption? {
         if (uri.scheme != "tangible" || uri.host != "movie") return null

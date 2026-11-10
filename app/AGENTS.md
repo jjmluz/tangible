@@ -24,8 +24,8 @@ Everything plays through Home Assistant's REST API with a long-lived token
 
 ### Music (Music Assistant only)
 
-- Album search uses Discogs; the Spotify Web API (client credentials) only maps a Discogs result
-  to a Spotify album ID when writing a tag.
+- Album search uses the Spotify Web API (client credentials), only when writing a tag. The tag
+  holds the album picked from the results.
 - Playback uses the Music Assistant integration:
   - Players: `POST /api/template` with `integration_entities('music_assistant')`.
   - Play: `music_assistant.play_media` with `media_id: spotify://album/<id>`, `enqueue: replace`.
@@ -43,8 +43,16 @@ Everything plays through Home Assistant's REST API with a long-lived token
 
 ### Movies (Android TV Remote only)
 
-- Movie search uses TMDB. The Streaming Availability API (region fixed to PT) gives each service's
-  link when writing a tag; `MovieService` (`data/MovieTag.kt`) pulls the content ID out of it.
+- Movie search uses the Streaming Availability API (region fixed to PT), only when writing a tag.
+  A search result already has each service's link; `MovieService` (`data/MovieTag.kt`) pulls the
+  content ID out of it. There's no TMDB API any more; the tag still holds the movie's TMDB ID.
+- The plan allows 1,000 requests a month. Each search (500 ms after typing stops) is one request.
+- Poster links from that API are signed and expire after 6 to 10 months, so `PosterStore` keeps a
+  copy of every movie tag's poster on the phone (`files/posters/<TMDB id>.jpg`) and the collection
+  shows that copy. A missing copy (new tag, restored backup, cleared storage) is fetched on the
+  next app start or collection change: first from the tag's saved link, and when that link is
+  dead, from a fresh one looked up by TMDB ID (one lookup a day per movie at most). Backups hold
+  only the link, not the image. Older tags have TMDB image links, which don't expire.
 - Services, in preference order: Netflix (`nf`), Disney+ (`dp`), HBO Max (`mx`), Prime Video
   (`pv`), Stremio (`sm`, IMDb ID, always offered). Only subscription availability counts, not
   rent, buy or add-on channels.
@@ -94,7 +102,7 @@ Everything plays through Home Assistant's REST API with a long-lived token
 
 ## Secrets
 
-API keys (Discogs, TMDB, Streaming Availability, Spotify client ID/secret) live in
+API keys (Streaming Availability, Spotify client ID/secret) live in
 `local.properties` (git-ignored) and reach the code through `BuildConfig` (see
 `app/build.gradle.kts`). Never hard-code keys or tokens in tracked files.
 

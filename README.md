@@ -10,7 +10,7 @@ isn't published on the Play Store.
 
 ### Music: Spotify through Music Assistant
 
-- **Writing a tag:** search for the album (Discogs), Tangible finds it on Spotify and writes
+- **Writing a tag:** search for the album (Spotify) and Tangible writes
   `tangible://play?spotify_album=<id>` to the tag.
 - **Playing:** scanning the tag, or tapping it in the collection, asks
   [Music Assistant](https://music-assistant.io) to play the album on your default player, through
@@ -26,8 +26,8 @@ isn't published on the Play Store.
 
 ### Movies: streaming apps on a Google TV, through Home Assistant
 
-- **Writing a tag:** search for the movie (TMDB). Tangible looks up where it's included in a
-  subscription in Portugal (Streaming Availability API) and offers Netflix, Disney+, HBO Max and
+- **Writing a tag:** search for the movie (Streaming Availability API). Tangible checks where it's
+  included in a subscription in Portugal and offers Netflix, Disney+, HBO Max and
   Prime Video, plus Stremio for anything with an IMDb ID. The most preferred one is preselected,
   in that order, and you can pick another. The tag holds that one service:
   `tangible://movie?tmdb=<id>&<service>=<content id>`.
@@ -63,8 +63,6 @@ API keys aren't in git. Add them to `local.properties` in the project root (git 
 them as environment variables with the same names:
 
 ```properties
-DISCOGS_TOKEN=...
-TMDB_API_KEY=...
 STREAMING_AVAILABILITY_API_KEY=...
 SPOTIFY_CLIENT_ID=...
 SPOTIFY_CLIENT_SECRET=...

@@ -25,8 +25,6 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         listOf(
-            "DISCOGS_TOKEN",
-            "TMDB_API_KEY",
             "STREAMING_AVAILABILITY_API_KEY",
             "SPOTIFY_CLIENT_ID",
             "SPOTIFY_CLIENT_SECRET"

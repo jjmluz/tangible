@@ -65,4 +65,11 @@ class MovieTagTest {
     fun `tags in the old format don't parse`() {
         assertNull(MovieTag.parse(Uri.parse("tangible://movie?tmdb_id=123&r=PT&nf=s:456&pv=r:789")))
     }
+
+    @Test
+    fun `the TMDB ID is read from a movie tag's URL`() {
+        assertEquals(438631, MovieTag.tmdbId("tangible://movie?tmdb=438631&mx=e7dc7b3a"))
+        assertNull(MovieTag.tmdbId("tangible://play?spotify_album=abc"))
+        assertNull(MovieTag.tmdbId("tangible://movie?tmdb_id=123&nf=456"))
+    }
 }

@@ -1,6 +1,7 @@
 package com.example.tangible.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class StreamingAvailabilityRepositoryTest {
@@ -75,5 +76,52 @@ class StreamingAvailabilityRepositoryTest {
                 ShowApiResponse(null, mapOf("us" to listOf(option("netflix", "subscription", "https://www.netflix.com/title/1"))))
             )
         )
+    }
+
+    @Test
+    fun `a search result carries the movie, its posters and where to watch it`() {
+        val result = StreamingAvailabilityRepository.resultFrom(
+            ShowApiResponse(
+                imdbId = "tt1160419",
+                streamingOptions = mapOf(
+                    "pt" to listOf(option("hbo", "subscription", "https://play.hbomax.com/movie/e7dc7b3a-a494-4ef1-8107-f4308aa6bbf7"))
+                ),
+                tmdbId = "movie/438631",
+                title = "Dune",
+                releaseYear = 2021,
+                imageSet = ImageSetDto(mapOf("w240" to "https://cdn/240.jpg?Expires=1", "w480" to "https://cdn/480.jpg?Expires=1"))
+            )
+        )
+
+        assertEquals(
+            MovieSearchResult(
+                tmdbId = 438631,
+                title = "Dune",
+                year = "2021",
+                thumbUrl = "https://cdn/240.jpg?Expires=1",
+                posterUrl = "https://cdn/480.jpg?Expires=1",
+                options = listOf(
+                    MovieOption(MovieService.HBO, "e7dc7b3a-a494-4ef1-8107-f4308aa6bbf7"),
+                    MovieOption(MovieService.STREMIO, "tt1160419")
+                )
+            ),
+            result
+        )
+    }
+
+    @Test
+    fun `a search result without a year or posters still works`() {
+        val result = StreamingAvailabilityRepository.resultFrom(
+            ShowApiResponse(imdbId = null, streamingOptions = null, tmdbId = "movie/841", title = "Dune")
+        )
+
+        assertEquals(MovieSearchResult(841, "Dune", "", null, null, emptyList()), result)
+    }
+
+    @Test
+    fun `results that aren't a movie with a title are skipped`() {
+        assertNull(StreamingAvailabilityRepository.resultFrom(ShowApiResponse(null, null, tmdbId = "tv/1399", title = "Game of Thrones")))
+        assertNull(StreamingAvailabilityRepository.resultFrom(ShowApiResponse(null, null, tmdbId = null, title = "Dune")))
+        assertNull(StreamingAvailabilityRepository.resultFrom(ShowApiResponse(null, null, tmdbId = "movie/841", title = "")))
     }
 }
