@@ -54,11 +54,19 @@ class NowPlayingController(
     /** What the last command should lead to; polled states that don't match it yet are ignored. */
     private class Expectation(
         val matches: (PlayerStatus) -> Boolean,
-        val deadlineMs: Long,
+        var deadlineMs: Long,
         val isStart: Boolean = false
     )
 
     private var expectation: Expectation? = null
+
+    // True from a scan until Home Assistant answers the play request. Nothing the player reports
+    // in that time is the new album yet, so the album being started stays on screen.
+    private var startRequestInFlight = false
+
+    // The album Tangible last started and on which player, to tell a rescan of the album that's
+    // playing (which restarts the same track) from a switch to another album.
+    private var lastStarted: Pair<String, String>? = null
 
     /**
      * Where the current track stopped. While a track is paused, Music Assistant reports unreliable
@@ -115,6 +123,7 @@ class NowPlayingController(
                 val fresh = holdStoppedPosition(reported)
                 val pending = expectation
                 if (pending != null) {
+                    if (pending.isStart && startRequestInFlight) return@onSuccess
                     if (pending.matches(fresh) || clock() >= pending.deadlineMs) {
                         clearExpectation()
                     } else {
@@ -155,35 +164,58 @@ class NowPlayingController(
         return previous.positionAt(stoppedAtMs)
     }
 
-    /** Called when a scan or the play button asks Music Assistant to play on [entityId]. */
-    fun playbackStarting(entityId: String, preview: AlbumPreview? = null) {
+    /**
+     * Called when a scan or a tap asks Music Assistant to play on [entityId]. [albumId] identifies
+     * the album, so a rescan of the one that's already playing can be told from a switch.
+     */
+    fun playbackStarting(entityId: String, preview: AlbumPreview? = null, albumId: String? = null) {
         setPlayer(entityId)
+        generation++ // A poll already in flight would show the previous album again.
         error = null
         isStarting = true
-        // Done once the player is playing something new, or the same track from the top (rescanning
-        // the album that's already playing).
-        val before = status?.contentId
-        // Until then, show the album being started rather than whatever the player last played.
+        val before = status
+        // Without an album ID there's no telling, so a restart of the same track counts as started.
+        val sameAlbumAgain = albumId == null || lastStarted == (entityId to albumId)
+        lastStarted = albumId?.let { entityId to it }
+        // Until the new album plays, show it rather than whatever the player last played.
         status = PlayerStatus(
             entityId = entityId,
-            name = status?.name ?: entityId,
+            name = before?.name ?: entityId,
             state = "idle",
             title = preview?.title,
             artist = preview?.artist,
             artworkUrl = preview?.artworkUrl,
-            volume = status?.volume,
-            contentId = before
+            volume = before?.volume,
+            contentId = before?.contentId
         )
         stoppedAt = null
+        startRequestInFlight = true
         expectation = Expectation(
-            matches = { it.isPlaying && (it.contentId != before || (it.positionAt(clock()) ?: 0.0) < 5.0) },
+            matches = { fresh -> isNewPlayback(fresh, before, sameAlbumAgain) },
             deadlineMs = clock() + startTimeoutMs,
             isStart = true
         )
     }
 
+    /**
+     * Whether [fresh] is the album that was just requested, rather than the previous one still
+     * playing or on its way out. While Music Assistant swaps the queue, the player can report the
+     * previous track under another content ID, with no track at all, or back at 0:00, so a changed
+     * content ID alone isn't enough.
+     */
+    private fun isNewPlayback(fresh: PlayerStatus, before: PlayerStatus?, sameAlbumAgain: Boolean): Boolean {
+        if (!fresh.isPlaying || !fresh.hasMedia) return false
+        if (before == null || !before.hasMedia) return true
+        val sameTrack = fresh.contentId == before.contentId ||
+            (fresh.title == before.title && fresh.artist == before.artist && fresh.album == before.album)
+        if (!sameTrack) return true
+        // Rescanning the album that's playing starts the same track again from the top.
+        return sameAlbumAgain && (fresh.positionAt(clock()) ?: return false) < 5.0
+    }
+
     fun playbackStarted(result: Result<Unit>) {
         val pending = expectation?.takeIf { it.isStart }
+        startRequestInFlight = false
         generation++
         result.onFailure {
             showActionError(it.message)
@@ -192,7 +224,13 @@ class NowPlayingController(
             refreshSoon()
             return
         }
-        if (pending != null) scope.launch { awaitConfirmation(pending) } else isStarting = false
+        if (pending != null) {
+            // The speaker's time to start counts from here, not from the scan.
+            pending.deadlineMs = clock() + startTimeoutMs
+            scope.launch { awaitConfirmation(pending) }
+        } else {
+            isStarting = false
+        }
     }
 
     fun playPause() {

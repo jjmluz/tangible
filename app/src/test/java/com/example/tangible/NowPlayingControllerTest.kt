@@ -415,4 +415,98 @@ class NowPlayingControllerTest {
         assertEquals(null, controller.status!!.title)
         assertTrue(controller.isStarting)
     }
+
+    private fun oldTrack(positionSec: Double = 120.0) =
+        status(state = "playing", contentId = "track/old", positionSec = positionSec)
+            .copy(title = "Old song", album = "Old album", artworkUrl = "old.jpg")
+
+    private fun TestScope.startingOver(old: PlayerStatus, albumId: String = "new"): NowPlayingController {
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns Result.success(old)
+        val controller = controller()
+        controller.setPlayer("media_player.a")
+        runCurrent()
+        controller.playbackStarting("media_player.a", AlbumPreview("Hansa Session", "CHVRCHES", "hansa.jpg"), albumId)
+        return controller
+    }
+
+    @Test
+    fun `nothing the player reports is shown until Home Assistant answers the play request`() = runTest {
+        val controller = startingOver(oldTrack())
+
+        // Even something that looks like a new track: the request hasn't been answered yet.
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns Result.success(
+            status(state = "playing", contentId = "track/other", positionSec = 0.0).copy(title = "Other")
+        )
+        controller.refresh()
+        assertTrue(controller.isStarting)
+        assertEquals("Hansa Session", controller.status!!.title)
+
+        controller.playbackStarted(Result.success(Unit))
+        advanceTimeBy(400)
+        runCurrent()
+        assertFalse(controller.isStarting)
+        assertEquals("Other", controller.status!!.title)
+    }
+
+    @Test
+    fun `the previous album isn't shown while Music Assistant swaps the queue`() = runTest {
+        val controller = startingOver(oldTrack())
+        controller.playbackStarted(Result.success(Unit))
+
+        // The previous track under another content ID, back at 0:00, or no track at all.
+        val glitches = listOf(
+            oldTrack().copy(contentId = "http://ma/stream/1"),
+            oldTrack(positionSec = 0.0).copy(positionUpdatedAtMs = testScheduler.currentTime),
+            oldTrack().copy(positionSec = null),
+            status(state = "playing", contentId = "track/none").copy(title = null)
+        )
+        for (glitch in glitches) {
+            coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns Result.success(glitch)
+            advanceTimeBy(600)
+            assertTrue("shown: $glitch", controller.isStarting)
+            assertEquals("Hansa Session", controller.status!!.title)
+        }
+
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns Result.success(
+            status(state = "playing", contentId = "track/new", positionSec = 0.0).copy(title = "Miracle")
+        )
+        advanceTimeBy(400)
+        runCurrent()
+        assertFalse(controller.isStarting)
+        assertEquals("Miracle", controller.status!!.title)
+    }
+
+    @Test
+    fun `rescanning the album that's playing is done when its track restarts`() = runTest {
+        val controller = startingOver(status(state = "paused", contentId = "track/earlier"), albumId = "same")
+        controller.playbackStarted(Result.success(Unit))
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns Result.success(oldTrack())
+        advanceTimeBy(400)
+        runCurrent()
+        assertFalse(controller.isStarting)
+
+        controller.playbackStarting("media_player.a", albumId = "same")
+        controller.playbackStarted(Result.success(Unit))
+        assertTrue(controller.isStarting)
+        coEvery { repo.fetchPlayerStatus(any(), any(), any()) } returns
+            Result.success(oldTrack(positionSec = 1.0).copy(positionUpdatedAtMs = testScheduler.currentTime))
+        advanceTimeBy(400)
+        runCurrent()
+        assertFalse(controller.isStarting)
+        assertEquals("Old song", controller.status!!.title)
+    }
+
+    @Test
+    fun `the speaker's time to start counts from Home Assistant's answer`() = runTest {
+        val controller = startingOver(oldTrack())
+        advanceTimeBy(12_000) // Home Assistant takes its time to answer.
+        controller.playbackStarted(Result.success(Unit))
+        advanceTimeBy(10_000)
+        assertTrue(controller.isStarting)
+        assertEquals("Hansa Session", controller.status!!.title)
+        advanceTimeBy(6_000)
+        runCurrent()
+        assertFalse(controller.isStarting)
+        assertEquals("Old song", controller.status!!.title)
+    }
 }

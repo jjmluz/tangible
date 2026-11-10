@@ -143,6 +143,7 @@ class MainActivity : ComponentActivity() {
             onPlayerChanged = { prefs.edit().putString("now_playing_player_id", it).apply() }
         )
     }
+    private val scanDebouncer = ScanDebouncer()
     /** Bumped when a scan should bring up the Now Playing screen. */
     private var openNowPlayingRequest by mutableIntStateOf(0)
 
@@ -210,7 +211,9 @@ class MainActivity : ComponentActivity() {
         nowPlaying.setPlayer(prefs.getString("now_playing_player_id", null) ?: selectedMaPlayerId)
         savedTags = tagRepository.loadAll()
 
-        intent?.let { handleIntent(it) }
+        // Only a fresh launch: a recreated activity (rotation, theme change) still has the intent
+        // of the last scan, and handling it again would restart the album.
+        if (savedInstanceState == null) intent?.let { handleIntent(it) }
 
         setContent {
             TangibleTheme {
@@ -477,6 +480,13 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // A tap in the collection is deliberate; a scan can be the same tag read twice.
+        val scanKey = if (customTag == null && !isWritingMode) spotifyAlbumId ?: movie?.tvLink else null
+        if (scanKey != null && scanDebouncer.isRepeat(scanKey)) {
+            Log.d("Tangible", "Ignoring a repeated read of the same tag")
+            return
+        }
+
         val movieOption = movie
         if (movieOption != null && !isWritingMode) {
             playOnTv(movieOption, savedTag?.title)
@@ -528,7 +538,7 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "Pick a Music Assistant player in Settings", Toast.LENGTH_LONG).show()
             return
         }
-        nowPlaying.playbackStarting(playerId, preview)
+        nowPlaying.playbackStarting(playerId, preview, spotifyAlbumId)
         openNowPlayingRequest++
         val volume = maDefaultVolume
         lifecycleScope.launch {

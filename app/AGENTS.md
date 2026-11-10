@@ -67,6 +67,13 @@ Everything plays through Home Assistant's REST API with a long-lived token
   seek + play from there; MA's own resume goes back a second or two.
 - `media_position` is in whole seconds and only refreshed now and then; add the time since
   `media_position_updated_at` while playing.
+- A scan outside the app is launched by the NFC service in its own task with `CLEAR_TASK`. The
+  activity is `singleTask` so the one instance (and its `NowPlayingController`) gets the scan as
+  `onNewIntent`; with `singleTop` each scan made a new activity that knew nothing about what was
+  playing.
+- A phone held on a tag reads it again about a second later. `ScanDebouncer` ignores the repeat;
+  without it the album was requested twice and restarted a few seconds in.
+- `music_assistant.play_media` takes about 5 s to answer on the Sonos; the album starts right after.
 - On Android 15+, the per-app "launch via NFC" setting can block Tangible. A blocked scan opens the
   launcher activity without the tag data. The app warns about it (`NfcAdapter.isTagIntentAllowed`).
 
