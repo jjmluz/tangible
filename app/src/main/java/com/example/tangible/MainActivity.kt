@@ -93,6 +93,11 @@ data class SavedTag(
 )
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        /** Sent by the media controls: opens the Now Playing screen. */
+        const val ACTION_OPEN_NOW_PLAYING = "com.example.tangible.OPEN_NOW_PLAYING"
+    }
+
     private var nfcAdapter: NfcAdapter? = null
     private var isWritingMode by mutableStateOf(false)
     private var isNfcTagLaunchBlocked by mutableStateOf(false)
@@ -139,14 +144,7 @@ class MainActivity : ComponentActivity() {
     private val clientSecret = BuildConfig.SPOTIFY_CLIENT_SECRET
     private val spotifyRepository by lazy { SpotifyRepository(clientId, clientSecret) }
     private val homeAssistantRepository by lazy { HomeAssistantRepository() }
-    private val nowPlaying by lazy {
-        NowPlayingController(
-            repository = homeAssistantRepository,
-            scope = lifecycleScope,
-            settings = { haServerUrl to haAccessToken },
-            onPlayerChanged = { prefs.edit().putString("now_playing_player_id", it).apply() }
-        )
-    }
+    private val nowPlaying by lazy { NowPlaying.controller(this) }
     private val scanDebouncer = ScanDebouncer()
     /** Bumped when a scan should bring up the Now Playing screen. */
     private var openNowPlayingRequest by mutableIntStateOf(0)
@@ -390,12 +388,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        nowPlaying.startPolling()
+        NowPlaying.setPolling(this, this, true)
     }
 
     override fun onStop() {
         super.onStop()
-        nowPlaying.stopPolling()
+        NowPlaying.setPolling(this, this, false)
     }
 
     override fun onResume() {
@@ -445,6 +443,12 @@ class MainActivity : ComponentActivity() {
         val dataString = intent.dataString
 
         Log.d("Tangible", "Handling intent: action=$action, data=$data, isWritingMode=$isWritingMode")
+
+        // A tap on the media controls.
+        if (action == ACTION_OPEN_NOW_PLAYING) {
+            openNowPlayingRequest++
+            return
+        }
 
         val savedTag = customTag ?: savedTags.find { it.url == dataString }
 

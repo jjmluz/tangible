@@ -19,6 +19,9 @@ isn't published on the Play Store.
 - **Now Playing:** opens after you start an album. It shows the cover, title and progress, and has
   play/pause, previous/next, seek, volume, and a player switcher that moves the queue to another
   player. A mini player sits above the collection while something is loaded.
+- **Media controls:** while an album plays, Android's media controls (quick settings and the lock
+  screen) show the track with play/pause, previous/next and seek, and they control the speaker.
+  While they're showing, the phone's volume keys set the speaker's volume.
 - **Default volume** (optional): the player is set to this volume right before an album starts.
 
 ### Movies: streaming apps on a Google TV, through Home Assistant

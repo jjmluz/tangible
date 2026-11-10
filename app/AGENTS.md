@@ -33,7 +33,12 @@ Everything plays through Home Assistant's REST API with a long-lived token
   - State: `GET /api/states/<entity>` (title, artist, artwork, position, volume).
 - Every music tag plays on the default player (Settings → Music → Player). There are no per-tag
   outputs, no play buttons and no Edit tag for music: a tap plays and opens Now Playing.
-- `NowPlayingController` polls the player every 2 s while the app is visible and sends controls.
+- `NowPlayingController` polls the player every 2 s and sends controls. There's one per process
+  (`NowPlaying.controller`), polled while the app is visible or the media controls are showing.
+- `MediaControlsService` mirrors it into a `MediaSession` (quick settings and lock screen controls).
+  The session is remote (`setPlaybackToRemote`), so the phone's volume keys set the speaker's volume.
+  It's a `mediaPlayback` foreground service that starts when something plays while the app is open,
+  and stops when nothing is loaded or playback has been paused for 10 minutes.
 - There's no Sonos, Apple Music, YouTube Music, Spotify App Remote or local playback any more.
 
 ### Movies (Android TV Remote only)
