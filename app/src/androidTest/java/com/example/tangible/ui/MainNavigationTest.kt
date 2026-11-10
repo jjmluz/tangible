@@ -21,7 +21,7 @@ class MainNavigationTest {
         
         // Verify Settings screen is shown
         composeTestRule.onNodeWithText("Settings").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Music Assistant").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Connection").assertIsDisplayed()
 
         // Navigate back to Collection
         composeTestRule.onNodeWithContentDescription("Collection").performClick()

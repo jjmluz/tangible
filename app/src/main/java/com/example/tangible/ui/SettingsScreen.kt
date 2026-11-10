@@ -70,13 +70,13 @@ fun SettingsScreen(
 
         SectionHeader("Music")
         Spacer(Modifier.height(8.dp))
-        SettingsItem("Music Assistant", musicAssistantSubtitle, onMusicAssistantClick)
+        SettingsItem("Player", musicAssistantSubtitle, onMusicAssistantClick)
 
         Spacer(Modifier.height(24.dp))
 
         SectionHeader("Movies")
         Spacer(Modifier.height(8.dp))
-        SettingsItem("TV", tvSubtitle, onMovieTvClick)
+        SettingsItem("Player", tvSubtitle, onMovieTvClick)
 
         Spacer(Modifier.height(24.dp))
 
@@ -237,7 +237,7 @@ fun MusicAssistantScreen(
         if (isConfigured && players.isEmpty() && !isRefreshing) onRefresh()
     }
 
-    SettingsSubPage(title = "Music Assistant", onBackClick = onBackClick) {
+    SettingsSubPage(title = "Music", onBackClick = onBackClick) {
             Text(
                 text = "Tags play Spotify albums through Music Assistant. " +
                     "To play on several speakers at once, create a player group in Music Assistant and pick it below.",
@@ -360,7 +360,7 @@ fun MovieTvScreen(
         if (isConfigured && tvs.isEmpty() && !isRefreshing) onRefresh()
     }
 
-    SettingsSubPage(title = "TV", onBackClick = onBackClick) {
+    SettingsSubPage(title = "Movies", onBackClick = onBackClick) {
         Text(
             text = "Movie tags open on this TV, in Netflix, Disney+, HBO Max, Prime Video or Stremio. " +
                 "The TV needs the Android TV Remote integration in Home Assistant.",

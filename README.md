@@ -42,8 +42,8 @@ isn't published on the Play Store.
    - Home Assistant → Connection: your Home Assistant address, e.g.
      `http://homeassistant.local:8123`, and a long-lived access token (create one in Home Assistant
      under Profile → Security).
-   - Music → Music Assistant: pick a player (or a player group), and optionally a default volume.
-   - Movies → TV: pick your TV.
+   - Music → Player: pick a player (or a player group), and optionally a default volume.
+   - Movies → Player: pick your TV.
 3. **Android 15+:** if Tangible shows "NFC tags can't open Tangible", tap **Allow**. Android lets
    you block apps from opening on an NFC scan, and a blocked scan only brings the app to the front
    without playing.
