@@ -7,6 +7,17 @@ album or movie on your speakers or TV. It's an Android app (Kotlin, Jetpack Comp
 everything through your own [Home Assistant](https://www.home-assistant.io). It isn't on the Play
 Store: you build it yourself.
 
+<p>
+  <img src="docs/screenshots/music.png" width="260" alt="Music collection: a grid of album covers">
+  <img src="docs/screenshots/movies.png" width="260" alt="Movie collection: a grid of movie posters">
+  <img src="docs/screenshots/search.png" width="260" alt="Writing a tag: searching albums">
+</p>
+<p>
+  <img src="docs/screenshots/write.png" width="260" alt="Writing a tag: an album, waiting for the tag">
+  <img src="docs/screenshots/write-movie.png" width="260" alt="Writing a tag: a movie, picking the streaming service it opens in">
+  <img src="docs/screenshots/streaming.png" width="260" alt="Settings: API key, region and streaming services">
+</p>
+
 ## What you need
 
 - An Android phone with NFC (Android 11 or newer) and some NFC tags. NTAG213 or bigger works.
