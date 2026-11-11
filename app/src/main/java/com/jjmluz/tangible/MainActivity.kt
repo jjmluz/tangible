@@ -526,9 +526,10 @@ class MainActivity : ComponentActivity() {
     /**
      * Android 15+ lets the user stop individual apps from being opened by NFC tags. When Tangible
      * is blocked, a scan only brings the app to the front without the tag data, so nothing plays.
+     * The API to ask whether that's the case only exists from Android 16.
      */
     private fun checkNfcTagLaunchBlocked(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) return false
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.BAKLAVA) return false
         val adapter = nfcAdapter ?: return false
         return runCatching {
             adapter.isTagIntentAppPreferenceSupported && !adapter.isTagIntentAllowed
