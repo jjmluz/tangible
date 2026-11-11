@@ -23,6 +23,7 @@ import coil.imageLoader
 import coil.request.ImageRequest
 import com.jjmluz.tangible.data.HomeAssistantRepository
 import com.jjmluz.tangible.data.PlayerStatus
+import com.jjmluz.tangible.data.SecretStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
@@ -44,12 +45,13 @@ object NowPlaying {
         instance?.let { return it }
         val app = context.applicationContext
         val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val secrets = SecretStore(app)
         val scope = MainScope()
         val controller = NowPlayingController(
             repository = HomeAssistantRepository(),
             scope = scope,
             settings = {
-                (prefs.getString("ha_server_url", "") ?: "") to (prefs.getString("ha_access_token", "") ?: "")
+                (prefs.getString("ha_server_url", "") ?: "") to secrets.get(SecretStore.HA_ACCESS_TOKEN).orEmpty()
             },
             onPlayerChanged = { prefs.edit().putString("now_playing_player_id", it).apply() }
         )
