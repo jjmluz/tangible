@@ -37,7 +37,7 @@ Everything plays through Home Assistant's REST API with a long-lived token
     `enqueue: replace`.
   - Controls: `media_player.*` services; switching players: `music_assistant.transfer_queue`.
   - State: `GET /api/states/<entity>` (title, artist, artwork, position, volume).
-- Every music tag plays on the default player (Settings → Music → Player). There are no per-tag
+- Every music tag plays on the default player (Settings → Music → Music player). There are no per-tag
   outputs, no play buttons and no Edit tag for music: a tap plays and opens Now Playing.
 - `NowPlayingController` polls the player every 2 s and sends controls. There's one per process
   (`NowPlaying.controller`), polled while the app is visible or the media controls are showing.
@@ -64,7 +64,7 @@ Everything plays through Home Assistant's REST API with a long-lived token
   rent, buy or add-on channels.
 - A tag holds one service, picked on the write screen (the most preferred is preselected).
 - Playback: `media_player.play_media` with `media_content_type: url` on the TV picked in
-  Settings → Movies → Player. TVs are listed with `integration_entities('androidtv_remote')`.
+  Settings → Movies → Movie player. TVs are listed with `integration_entities('androidtv_remote')`.
 - Links that open on the TV (tested on a Google TV Streamer):
   - Netflix: `https://www.netflix.com/title/<id>?source=30` (without `source=30` it doesn't open the title)
   - Disney+: `https://www.disneyplus.com/browse/entity-<uuid>`

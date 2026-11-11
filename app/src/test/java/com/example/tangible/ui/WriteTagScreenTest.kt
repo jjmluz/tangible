@@ -3,12 +3,14 @@ package com.example.tangible.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import com.example.tangible.data.AlbumSearchResult
 import org.junit.Assert.assertEquals
@@ -54,7 +56,9 @@ class WriteTagScreenTest {
         composeTestRule.waitUntil(5_000) {
             composeTestRule.onAllNodesWithText("Kind of Blue").fetchSemanticsNodes().isNotEmpty()
         }
-        composeTestRule.onNodeWithText("Kind of Blue").performClick()
+        // The results list has uneven corners, and Robolectric can't hit-test a tap against that
+        // outline, so the row gets the click action directly.
+        composeTestRule.onNodeWithText("Kind of Blue").performSemanticsAction(SemanticsActions.OnClick)
         composeTestRule.onNodeWithText("Hold tag near device...").assertIsDisplayed()
     }
 

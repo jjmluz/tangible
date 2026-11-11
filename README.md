@@ -43,11 +43,11 @@ isn't published on the Play Store.
    - Music: Music Assistant installed, with your Spotify account added in Music Assistant.
    - Movies: the Android TV Remote integration set up for your Google TV.
 2. **In Tangible**, open Settings:
-   - Home Assistant → Connection: your Home Assistant address, e.g.
+   - Home Assistant → Server: your Home Assistant address, e.g.
      `http://homeassistant.local:8123`, and a long-lived access token (create one in Home Assistant
      under Profile → Security).
-   - Music → Player: pick a player (or a player group), and optionally a default volume.
-   - Movies → Player: pick your TV.
+   - Music → Music player: pick a player (or a player group), and optionally a default volume.
+   - Movies → Movie player: pick your TV.
 3. **Android 15+:** if Tangible shows "NFC tags can't open Tangible", tap **Allow**. Android lets
    you block apps from opening on an NFC scan, and a blocked scan only brings the app to the front
    without playing.

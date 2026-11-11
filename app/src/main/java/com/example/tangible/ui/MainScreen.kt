@@ -66,9 +66,11 @@ fun MainScreen(
     onViewModeChange: (ViewMode) -> Unit = {},
     isNfcTagLaunchBlocked: Boolean = false,
     onFixNfcTagLaunch: () -> Unit = {},
-    bottomContentPadding: androidx.compose.ui.unit.Dp = 112.dp
+    bottomContentPadding: androidx.compose.ui.unit.Dp = 112.dp,
+    initialType: String = "MUSIC",
+    onTypeChange: (String) -> Unit = {}
 ) {
-    var selectedType by remember { mutableStateOf("MUSIC") }
+    var selectedType by remember { mutableStateOf(initialType) }
 
     val currentSortField = if (selectedType == "MUSIC") musicSortField else movieSortField
     val currentSortOrder = if (selectedType == "MUSIC") musicSortOrder else movieSortOrder
@@ -162,7 +164,7 @@ fun MainScreen(
                             icon = Icons.Default.MusicNote,
                             selected = selectedType == "MUSIC",
                             isFirst = true,
-                            onClick = { selectedType = "MUSIC" },
+                            onClick = { selectedType = "MUSIC"; onTypeChange("MUSIC") },
                             modifier = Modifier.weight(1f)
                         )
                         TypeButton(
@@ -170,7 +172,7 @@ fun MainScreen(
                             icon = Icons.Default.Movie,
                             selected = selectedType == "MOVIE",
                             isFirst = false,
-                            onClick = { selectedType = "MOVIE" },
+                            onClick = { selectedType = "MOVIE"; onTypeChange("MOVIE") },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -225,7 +227,7 @@ fun MainScreen(
  * the other is tonal with tighter corners on the side where the two meet.
  */
 @Composable
-private fun TypeButton(
+internal fun TypeButton(
     label: String,
     icon: ImageVector,
     selected: Boolean,
@@ -260,7 +262,7 @@ private fun TypeButton(
 }
 
 /** Rows read as one group: big corners on the outside, small ones where rows meet. */
-private fun groupedRowShape(index: Int, count: Int): RoundedCornerShape {
+internal fun groupedRowShape(index: Int, count: Int): RoundedCornerShape {
     val top = if (index == 0) 24.dp else 6.dp
     val bottom = if (index == count - 1) 24.dp else 6.dp
     return RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom)

@@ -19,6 +19,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Add
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -65,6 +67,7 @@ import com.example.tangible.ui.HomeAssistantScreen
 import com.example.tangible.ui.MovieTvScreen
 import com.example.tangible.ui.MusicAssistantScreen
 import com.example.tangible.ui.SettingsScreen
+import com.example.tangible.ui.TagType
 import com.example.tangible.ui.TagWriteInfo
 import com.example.tangible.ui.WelcomeWizardScreen
 import com.example.tangible.ui.WriteTagScreen
@@ -743,6 +746,9 @@ fun TangibleApp(
     }
 
     var selectedTagIds by remember { mutableStateOf(setOf<String>()) }
+    // Music or Movies in the collection. It's kept here so the collection comes back on the same
+    // one, and so Write tag opens on it.
+    var collectionType by rememberSaveable { mutableStateOf("MUSIC") }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
     val showChrome = currentRoute == "collection" || currentRoute == "settings"
@@ -910,8 +916,10 @@ fun TangibleApp(
                     onViewModeChange = onViewModeChange,
                     isNfcTagLaunchBlocked = isNfcTagLaunchBlocked,
                     onFixNfcTagLaunch = onFixNfcTagLaunch,
+                    initialType = collectionType,
+                    onTypeChange = { collectionType = it },
                     bottomContentPadding = innerPadding.calculateBottomPadding() +
-                        (if (miniStatus != null) 188.dp else 100.dp)
+                        (if (miniStatus != null) 212.dp else 124.dp)
                 )
                 // Write tag sits above the mini player; both float over the end of the list.
                 Column(
@@ -924,11 +932,18 @@ fun TangibleApp(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     if (selectedTagIds.isEmpty()) {
-                        ExtendedFloatingActionButton(
+                        // 80dp, the size of Google Keep's add button, rather than the standard 56dp.
+                        FloatingActionButton(
                             onClick = { navController.navigate("write_tag") },
-                            icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                            text = { Text("Write tag") }
-                        )
+                            shape = RoundedCornerShape(20.dp),
+                            modifier = Modifier.size(80.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = "Write tag",
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
                     }
                     if (miniStatus != null && nowPlaying != null) {
                         MiniPlayer(
@@ -974,6 +989,7 @@ fun TangibleApp(
                     isWriting = isWritingMode,
                     writeError = writeError,
                     writeSucceeded = writeSucceeded,
+                    initialType = if (collectionType == "MOVIE") TagType.MOVIE else TagType.MUSIC,
                     onDone = {
                         onSuccessDismissed()
                         navController.navigate("collection") {

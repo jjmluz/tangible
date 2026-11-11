@@ -64,19 +64,19 @@ fun SettingsScreen(
     ) {
         SectionHeader("Home Assistant")
         Spacer(Modifier.height(8.dp))
-        SettingsItem("Connection", homeAssistantSubtitle, onHomeAssistantClick)
+        SettingsItem("Server", homeAssistantSubtitle, onHomeAssistantClick)
 
         Spacer(Modifier.height(24.dp))
 
         SectionHeader("Music")
         Spacer(Modifier.height(8.dp))
-        SettingsItem("Player", musicAssistantSubtitle, onMusicAssistantClick)
+        SettingsItem("Music player", musicAssistantSubtitle, onMusicAssistantClick)
 
         Spacer(Modifier.height(24.dp))
 
         SectionHeader("Movies")
         Spacer(Modifier.height(8.dp))
-        SettingsItem("Player", tvSubtitle, onMovieTvClick)
+        SettingsItem("Movie player", tvSubtitle, onMovieTvClick)
 
         Spacer(Modifier.height(24.dp))
 

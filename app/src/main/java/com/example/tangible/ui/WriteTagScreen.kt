@@ -30,7 +30,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -75,12 +76,13 @@ fun WriteTagScreen(
     writeError: String? = null,
     writeSucceeded: Boolean = false,
     onDone: () -> Unit = {},
+    initialType: TagType = TagType.MUSIC,
     onTagInfoUpdate: (TagWriteInfo?) -> Unit,
     onWriteClick: (TagWriteInfo) -> Unit,
     onSearchAlbums: suspend (String) -> Result<List<AlbumSearchResult>> = { Result.success(emptyList()) },
     onSearchMovies: suspend (String) -> List<MovieSearchResult> = { emptyList() }
 ) {
-    var tagType by remember { mutableStateOf(TagType.MUSIC) }
+    var tagType by remember { mutableStateOf(initialType) }
 
     // Music state
     var url by remember { mutableStateOf("") }
@@ -185,7 +187,7 @@ fun WriteTagScreen(
             TopAppBar(
                 title = {
                     Text(
-                        "Write Tag",
+                        "Write tag",
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onBackground
                     )
@@ -273,119 +275,208 @@ private fun WriteTagSearchContent(
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier.padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        // imePadding keeps the last results above the keyboard.
+        modifier = modifier
+            .imePadding()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            SegmentedButton(
+        // The same Music/Movies switch as the collection.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            TypeButton(
+                label = "Music",
+                icon = Icons.Default.MusicNote,
                 selected = tagType == TagType.MUSIC,
+                isFirst = true,
                 onClick = { onTagTypeChange(TagType.MUSIC) },
-                shape = SegmentedButtonDefaults.itemShape(
-                    index = 0,
-                    count = 2,
-                    baseShape = RoundedCornerShape(8.dp)
-                ),
-                icon = { Icon(Icons.Default.MusicNote, contentDescription = null) }
-            ) {
-                Text("Music")
-            }
-            SegmentedButton(
+                modifier = Modifier.weight(1f)
+            )
+            TypeButton(
+                label = "Movies",
+                icon = Icons.Default.Movie,
                 selected = tagType == TagType.MOVIE,
+                isFirst = false,
                 onClick = { onTagTypeChange(TagType.MOVIE) },
-                shape = SegmentedButtonDefaults.itemShape(
-                    index = 1,
-                    count = 2,
-                    baseShape = RoundedCornerShape(8.dp)
-                ),
-                icon = { Icon(Icons.Default.Movie, contentDescription = null) }
-            ) {
-                Text("Movie")
-            }
+                modifier = Modifier.weight(1f)
+            )
         }
 
         when (tagType) {
             TagType.MUSIC -> {
-                OutlinedTextField(
-                    value = musicSearchQuery,
-                    onValueChange = onMusicSearchQueryChange,
-                    label = { Text("Search artist or album") },
-                    modifier = Modifier.fillMaxWidth(),
-                    trailingIcon = {
-                        if (isSearchingMusic) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        } else {
-                            Icon(Icons.Default.Search, contentDescription = null)
-                        }
-                    }
+                SearchField(
+                    query = musicSearchQuery,
+                    onQueryChange = onMusicSearchQueryChange,
+                    placeholder = "Search artist or album",
+                    isSearching = isSearchingMusic
                 )
                 if (musicSearchError != null) {
                     Text(
                         musicSearchError,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = 8.dp)
                     )
                 }
                 if (musicResults.isNotEmpty()) {
-                    SearchResultsCard {
-                        items(musicResults) { result ->
-                            ListItem(
-                                headlineContent = { Text(result.name) },
-                                supportingContent = {
-                                    val details = listOf(result.artistName, result.version).filter { it.isNotBlank() }
-                                    if (details.isNotEmpty()) Text(details.joinToString(" · "))
-                                },
-                                leadingContent = {
-                                    AsyncImage(
-                                        model = result.imageUrl,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(40.dp)
-                                    )
-                                },
-                                modifier = Modifier.clickable { onMusicResultSelected(result) }
-                            )
-                        }
+                    SearchResults(musicResults) { index, result ->
+                        SearchResultRow(
+                            title = result.name,
+                            subtitle = listOf(result.artistName, result.version).filter { it.isNotBlank() }.joinToString(" · "),
+                            imageUrl = result.imageUrl,
+                            isPoster = false,
+                            shape = groupedRowShape(index, musicResults.size),
+                            onClick = { onMusicResultSelected(result) }
+                        )
                     }
+                } else if (musicSearchError == null && !isSearchingMusic) {
+                    SearchHint("Find the album, then hold a tag to the phone to write it.")
                 }
             }
             TagType.MOVIE -> {
-                OutlinedTextField(
-                    value = movieSearchQuery,
-                    onValueChange = onMovieSearchQueryChange,
-                    label = { Text("Search movie") },
-                    modifier = Modifier.fillMaxWidth(),
-                    trailingIcon = {
-                        if (isSearchingMovies) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        } else {
-                            Icon(Icons.Default.Search, contentDescription = null)
-                        }
-                    }
+                SearchField(
+                    query = movieSearchQuery,
+                    onQueryChange = onMovieSearchQueryChange,
+                    placeholder = "Search movie",
+                    isSearching = isSearchingMovies
                 )
                 if (movieResults.isNotEmpty()) {
-                    SearchResultsCard {
-                        items(movieResults) { movie ->
-                            ListItem(
-                                headlineContent = { Text(movie.title) },
-                                supportingContent = { if (movie.year.isNotBlank()) Text(movie.year) },
-                                leadingContent = {
-                                    AsyncImage(
-                                        model = movie.thumbUrl,
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .width(40.dp)
-                                            .height(60.dp)
-                                            .clip(RoundedCornerShape(4.dp)),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                },
-                                modifier = Modifier.clickable { onMovieResultSelected(movie) }
-                            )
-                        }
+                    SearchResults(movieResults) { index, movie ->
+                        SearchResultRow(
+                            title = movie.title,
+                            subtitle = movie.year,
+                            imageUrl = movie.thumbUrl,
+                            isPoster = true,
+                            shape = groupedRowShape(index, movieResults.size),
+                            onClick = { onMovieResultSelected(movie) }
+                        )
                     }
+                } else if (!isSearchingMovies) {
+                    SearchHint("Find the movie, then hold a tag to the phone to write it.")
                 }
             }
         }
     }
+}
+
+/** A pill-shaped search box in a tonal fill, with no outline or underline. */
+@Composable
+private fun SearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    placeholder: String,
+    isSearching: Boolean
+) {
+    TextField(
+        value = query,
+        onValueChange = onQueryChange,
+        placeholder = { Text(placeholder) },
+        singleLine = true,
+        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+        trailingIcon = {
+            if (isSearching) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
+            } else if (query.isNotEmpty()) {
+                IconButton(onClick = { onQueryChange("") }) {
+                    Icon(Icons.Default.Close, contentDescription = "Clear search")
+                }
+            }
+        },
+        shape = RoundedCornerShape(28.dp),
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent
+        ),
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+/** Results as one group of tonal rows, like the collection's list. */
+@Composable
+private fun <T> ColumnScope.SearchResults(results: List<T>, row: @Composable (Int, T) -> Unit) {
+    LazyColumn(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        contentPadding = PaddingValues(bottom = 24.dp)
+    ) {
+        itemsIndexed(results) { index, result -> row(index, result) }
+    }
+}
+
+@Composable
+private fun SearchResultRow(
+    title: String,
+    subtitle: String,
+    imageUrl: String?,
+    isPoster: Boolean,
+    shape: RoundedCornerShape,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .clickable(onClick = onClick)
+            .padding(start = 12.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(modifier = Modifier.size(60.dp), contentAlignment = Alignment.Center) {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = null,
+                modifier = (if (isPoster) Modifier.size(width = 40.dp, height = 60.dp) else Modifier.size(60.dp))
+                    .clip(RoundedCornerShape(if (isPoster) 8.dp else 14.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                contentScale = ContentScale.Crop
+            )
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 16.dp)
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (subtitle.isNotBlank()) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchHint(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 24.dp)
+    )
 }
 
 @Composable
@@ -616,7 +707,7 @@ private fun WriteTagConfirmContent(
                         .fillMaxWidth()
                         .height(56.dp)
                 ) {
-                    Text(if (writeError != null) "Try again" else "Write Tag")
+                    Text(if (writeError != null) "Try again" else "Write tag")
                 }
             }
         }
@@ -763,18 +854,6 @@ private fun MovieServicePicker(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun SearchResultsCard(content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = 300.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        LazyColumn { content() }
     }
 }
 
