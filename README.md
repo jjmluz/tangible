@@ -9,16 +9,13 @@ Store: you build it yourself.
 
 <p>
   <img src="docs/screenshots/music.png" width="260" alt="Music collection: a grid of album covers">
-  <img src="docs/screenshots/now-playing.png" width="260" alt="Now playing: album art, track progress, playback controls and volume for the selected speaker">
-  <img src="docs/screenshots/movies.png" width="260" alt="Movie collection: a grid of movie posters">
-</p>
-<p>
   <img src="docs/screenshots/search.png" width="260" alt="Writing a tag: searching albums">
-  <img src="docs/screenshots/write.png" width="260" alt="Writing a tag: an album, waiting for the tag">
-  <img src="docs/screenshots/write-movie.png" width="260" alt="Writing a tag: a movie, picking the streaming service it opens in">
+  <img src="docs/screenshots/now-playing.png" width="260" alt="Now playing: album art, track progress, playback controls and volume for the selected speaker">
 </p>
 <p>
-  <img src="docs/screenshots/streaming.png" width="260" alt="Settings: API key, region and streaming services">
+  <img src="docs/screenshots/movies.png" width="260" alt="Movie collection: a grid of movie posters">
+  <img src="docs/screenshots/write-movie-done.png" width="260" alt="Writing a tag: a movie tag written, ready to scan">
+  <img src="docs/screenshots/tv-remote.png" width="260" alt="After scanning a movie: the Google TV app's remote opens on the phone">
 </p>
 
 ## What you need
@@ -40,7 +37,7 @@ Store: you build it yourself.
 - **Writing a tag:** search for an album; the search goes through Music Assistant, so it covers
   your providers and your library. Tangible writes the album to the tag:
   `tangible://play?spotify_album=<id>` for a Spotify album, `tangible://play?album=<Music Assistant
-  URI>` for anything else.
+URI>` for anything else.
 - **Playing:** scanning the tag, or tapping it in the collection, asks Music Assistant to play the
   album on your default player (Home Assistant's `music_assistant.play_media` action). To play on
   several speakers, create a player group in Music Assistant and pick it as the default player.
@@ -60,7 +57,7 @@ Store: you build it yourself.
   movie's link on your TV (`media_player.play_media`), so the streaming app comes to the front on
   that movie. The Google TV app's remote opens on the phone at the same time, if it's installed.
 - **Services Tangible can open:** Netflix, Disney+, HBO Max and Prime Video, where they're
-  available in your region, and [Stremio](https://www.stremio.com) for any movie with an IMDb ID.
+  available in your region.
   Other services the API knows (Apple TV, Hulu and so on) are listed in Settings but can't be
   opened yet, because each needs a link format that's been tested on a TV.
 - **Posters:** Tangible keeps a copy of each movie tag's poster on the phone, because the API's
