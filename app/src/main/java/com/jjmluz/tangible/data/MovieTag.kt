@@ -37,6 +37,12 @@ enum class MovieService(
         Regex("gti=amzn1\\.dv\\.gti\\.([a-f0-9-]+)"),
         { "https://app.primevideo.com/detail?gti=amzn1.dv.gti.$it" }
     ),
+    APPLE(
+        "apple", "at", "Apple TV",
+        Regex("/(umc\\.cmc\\.[a-z0-9]+)"),
+        // The API's links carry a region and a title slug; the app only needs the ID.
+        { "https://tv.apple.com/movie/$it" }
+    ),
     STREMIO(
         null, "sm", "Stremio",
         Regex("^(tt\\d+)$"),

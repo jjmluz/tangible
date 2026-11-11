@@ -56,9 +56,9 @@ URI>` for anything else.
 - **Playing:** scanning the tag, or tapping it in the collection, asks Home Assistant to open the
   movie's link on your TV (`media_player.play_media`), so the streaming app comes to the front on
   that movie. The Google TV app's remote opens on the phone at the same time, if it's installed.
-- **Services Tangible can open:** Netflix, Disney+, HBO Max and Prime Video, where they're
-  available in your region.
-  Other services the API knows (Apple TV, Hulu and so on) are listed in Settings but can't be
+- **Services Tangible can open:** Netflix, Disney+, HBO Max, Prime Video and Apple TV, where
+  they're available in your region.
+  Other services the API knows (Hulu, Paramount+ and so on) are listed in Settings but can't be
   opened yet, because each needs a link format that's been tested on a TV.
 - **Posters:** Tangible keeps a copy of each movie tag's poster on the phone, because the API's
   poster links expire after some months. A missing copy is fetched again quietly.

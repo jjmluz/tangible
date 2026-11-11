@@ -31,6 +31,10 @@ class MovieTagTest {
             MovieService.PRIME.tvLink("66e03765-50f3-4b7e-89ed-c31e9aea7ee0")
         )
         assertEquals(
+            "https://tv.apple.com/movie/umc.cmc.qrdx9s4xrk47f4taowt4tx82",
+            MovieService.APPLE.tvLink("umc.cmc.qrdx9s4xrk47f4taowt4tx82")
+        )
+        assertEquals(
             "stremio:///detail/movie/tt1160419/tt1160419",
             MovieService.STREMIO.tvLink("tt1160419")
         )

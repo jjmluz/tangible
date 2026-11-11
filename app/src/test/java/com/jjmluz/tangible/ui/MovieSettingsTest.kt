@@ -30,7 +30,7 @@ class MovieSettingsTest {
 
     private val portugal = Region(
         "pt", "Portugal",
-        listOf(RegionService("netflix", "Netflix"), RegionService("hbo", "HBO Max"), RegionService("apple", "Apple TV"))
+        listOf(RegionService("netflix", "Netflix"), RegionService("hbo", "HBO Max"), RegionService("apple", "Apple TV"), RegionService("hulu", "Hulu"))
     )
     private val germany = Region("de", "Germany", listOf(RegionService("wow", "WOW")))
 
@@ -61,10 +61,11 @@ class MovieSettingsTest {
 
         composeTestRule.onNodeWithTag("service_nf").assertIsOn()
         composeTestRule.onNodeWithTag("service_mx").assertIsOn()
+        composeTestRule.onNodeWithTag("service_at").assertIsOn()
         composeTestRule.onNodeWithTag("service_sm").assertIsOn()
         composeTestRule.onNodeWithTag("service_dp").assertDoesNotExist()
         composeTestRule.onNodeWithTag("service_pv").assertDoesNotExist()
-        composeTestRule.onNodeWithText("Tangible can't open these yet: Apple TV.").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Tangible can't open these yet: Hulu.").performScrollTo().assertIsDisplayed()
     }
 
     @Test

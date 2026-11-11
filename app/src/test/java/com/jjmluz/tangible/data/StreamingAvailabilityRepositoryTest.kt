@@ -22,7 +22,8 @@ class StreamingAvailabilityRepositoryTest {
                 option("prime", "subscription", "https://app.primevideo.com/detail?gti=amzn1.dv.gti.a8025548-3908-4562-8896-8fffd945cfb6"),
                 option("hbo", "subscription", "https://play.hbomax.com/movie/e7dc7b3a-a494-4ef1-8107-f4308aa6bbf7"),
                 option("disney", "subscription", "https://www.disneyplus.com/browse/entity-f6174ebf-cb92-453c-a52b-62bb3576e402"),
-                option("netflix", "subscription", "https://www.netflix.com/title/80175798")
+                option("netflix", "subscription", "https://www.netflix.com/title/80175798"),
+                option("apple", "subscription", "https://tv.apple.com/pt/movie/f1-the-movie/umc.cmc.3t6dvnnr87zwd4wmvpdx5came")
             ), all
         )
 
@@ -32,6 +33,7 @@ class StreamingAvailabilityRepositoryTest {
                 MovieOption(MovieService.DISNEY, "f6174ebf-cb92-453c-a52b-62bb3576e402"),
                 MovieOption(MovieService.HBO, "e7dc7b3a-a494-4ef1-8107-f4308aa6bbf7"),
                 MovieOption(MovieService.PRIME, "a8025548-3908-4562-8896-8fffd945cfb6"),
+                MovieOption(MovieService.APPLE, "umc.cmc.3t6dvnnr87zwd4wmvpdx5came"),
                 MovieOption(MovieService.STREMIO, "tt1160419")
             ),
             options
@@ -46,7 +48,8 @@ class StreamingAvailabilityRepositoryTest {
                 option("prime", "rent", "https://www.primevideo.com/detail/0N4M7MPARPRVDWEMDJILO2I4TG?ref_=atv_dp"),
                 option("prime", "buy", "https://www.primevideo.com/detail/0N4M7MPARPRVDWEMDJILO2I4TG?ref_=atv_dp"),
                 option("prime", "addon", "https://app.primevideo.com/detail?gti=amzn1.dv.gti.11111111-2222-3333-4444-555555555555"),
-                option("apple", "subscription", "https://tv.apple.com/pt/movie/toy-story/umc.cmc.qrdx9s4xrk47f4taowt4tx82")
+                option("apple", "buy", "https://tv.apple.com/pt/movie/toy-story/umc.cmc.qrdx9s4xrk47f4taowt4tx82"),
+                option("hulu", "subscription", "https://www.hulu.com/movie/toy-story-8a0b6f8c-1b2a-4c7d-9e3f-0a1b2c3d4e5f")
             ), all
         )
 
@@ -165,7 +168,7 @@ class StreamingAvailabilityRepositoryTest {
 
         val regions = StreamingAvailabilityRepository.regionsFrom(
             mapOf(
-                "pt" to CountryDto("pt", "Portugal", listOf(service("netflix", "Netflix", true), service("apple", "Apple TV", false))),
+                "pt" to CountryDto("pt", "Portugal", listOf(service("netflix", "Netflix", true), service("hulu", "Hulu", false))),
                 "de" to CountryDto("DE", "Germany", listOf(service("wow", "WOW", true)))
             )
         )
@@ -181,7 +184,7 @@ class StreamingAvailabilityRepositoryTest {
 
     @Test
     fun `the services Tangible can open in a region always include Stremio`() {
-        val portugal = Region("pt", "Portugal", listOf(RegionService("netflix", "Netflix"), RegionService("apple", "Apple TV")))
+        val portugal = Region("pt", "Portugal", listOf(RegionService("netflix", "Netflix"), RegionService("hulu", "Hulu")))
 
         assertEquals(listOf(MovieService.NETFLIX, MovieService.STREMIO), MovieService.availableIn(portugal))
         assertEquals(MovieService.entries, MovieService.availableIn(null))
