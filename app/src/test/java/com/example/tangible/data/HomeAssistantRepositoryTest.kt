@@ -115,10 +115,10 @@ class HomeAssistantRepositoryTest {
     }
 
     @Test
-    fun `playSpotifyAlbum calls music_assistant play_media with a Spotify album uri`() = runBlocking {
+    fun `playAlbum calls music_assistant play_media with the album's uri`() = runBlocking {
         server.enqueue(MockResponse().setResponseCode(200).setBody("[]"))
 
-        val result = repository.playSpotifyAlbum(baseUrl, "token", "media_player.whole_house", "4LH4d3cOWNNsVw41Gqt2kv")
+        val result = repository.playAlbum(baseUrl, "token", "media_player.whole_house", "spotify://album/4LH4d3cOWNNsVw41Gqt2kv")
 
         assertTrue(result.isSuccess)
         val request = server.takeRequest()
@@ -135,7 +135,7 @@ class HomeAssistantRepositoryTest {
         server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
         server.enqueue(MockResponse().setResponseCode(200).setBody("[]"))
 
-        val result = repository.playSpotifyAlbum(baseUrl, "token", "media_player.kitchen", "abc")
+        val result = repository.playAlbum(baseUrl, "token", "media_player.kitchen", "spotify://album/abc")
 
         assertTrue(result.isSuccess)
         assertEquals(2, server.requestCount)
@@ -156,7 +156,7 @@ class HomeAssistantRepositoryTest {
     fun `HA service error message is surfaced`() = runBlocking {
         server.enqueue(MockResponse().setResponseCode(400).setBody("""{"message":"Player not found"}"""))
 
-        val result = repository.playSpotifyAlbum(baseUrl, "token", "media_player.gone", "abc")
+        val result = repository.playAlbum(baseUrl, "token", "media_player.gone", "spotify://album/abc")
 
         assertEquals("HTTP 400: Player not found", result.exceptionOrNull()?.message)
     }
@@ -165,7 +165,7 @@ class HomeAssistantRepositoryTest {
     fun `missing settings fail without a request`() = runBlocking {
         assertTrue(repository.fetchPlayers("", "token").isFailure)
         assertTrue(repository.fetchPlayers(baseUrl, " ").isFailure)
-        assertTrue(repository.playSpotifyAlbum(baseUrl, "token", "", "abc").isFailure)
+        assertTrue(repository.playAlbum(baseUrl, "token", "", "spotify://album/abc").isFailure)
         assertEquals(0, server.requestCount)
     }
 
@@ -289,5 +289,79 @@ class HomeAssistantRepositoryTest {
         )
         assertTrue(status.isActive)
         assertEquals("Graffiti", status.trackKey)
+    }
+
+    private val searchResponse = """
+        {"changed_states": [], "service_response": {
+          "artists": [], "tracks": [], "playlists": [], "radio": [], "audiobooks": [], "podcasts": [],
+          "albums": [
+            {"media_type": "album", "uri": "spotify--abc://album/6dVIqQ8qmQ5GBnJ9shOYGE", "name": "OK Computer",
+             "version": "", "image": "https://i.scdn.co/image/1",
+             "artists": [{"media_type": "artist", "uri": "spotify--abc://artist/1", "name": "Radiohead", "version": "", "image": null}]},
+            {"media_type": "album", "uri": "library://album/12", "name": "Kid A", "version": "Deluxe", "image": null},
+            {"media_type": "album", "uri": "library://album/12", "name": "Kid A", "version": "Deluxe", "image": null},
+            {"media_type": "album", "name": "No uri", "version": "", "image": null}
+          ]}}
+    """.trimIndent()
+
+    @Test
+    fun `searchAlbums looks up the Music Assistant entry and asks it for albums`() = runBlocking {
+        server.enqueue(MockResponse().setBody("01JABCENTRY"))
+        server.enqueue(MockResponse().setBody(searchResponse))
+
+        val albums = repository.searchAlbums(baseUrl, "token", "radiohead").getOrThrow()
+
+        assertEquals("/api/template", server.takeRequest().path)
+        val request = server.takeRequest()
+        assertEquals("/api/services/music_assistant/search?return_response", request.path)
+        val body = Gson().fromJson(request.body.readUtf8(), JsonObject::class.java)
+        assertEquals("01JABCENTRY", body["config_entry_id"].asString)
+        assertEquals("radiohead", body["name"].asString)
+        assertEquals("album", body["media_type"].asJsonArray.single().asString)
+        assertEquals(
+            listOf(
+                AlbumSearchResult("spotify--abc://album/6dVIqQ8qmQ5GBnJ9shOYGE", "OK Computer", "Radiohead", "", "https://i.scdn.co/image/1"),
+                AlbumSearchResult("library://album/12", "Kid A", "", "Deluxe", null)
+            ),
+            albums
+        )
+    }
+
+    @Test
+    fun `searchAlbums looks up the Music Assistant entry once`() = runBlocking {
+        server.enqueue(MockResponse().setBody("01JABCENTRY"))
+        server.enqueue(MockResponse().setBody(searchResponse))
+        server.enqueue(MockResponse().setBody(searchResponse))
+
+        repository.searchAlbums(baseUrl, "token", "radiohead")
+        repository.searchAlbums(baseUrl, "token", "radiohead kid a")
+
+        assertEquals(3, server.requestCount)
+    }
+
+    @Test
+    fun `searchAlbums fails when Music Assistant isn't set up`() = runBlocking {
+        server.enqueue(MockResponse().setBody(""))
+
+        val result = repository.searchAlbums(baseUrl, "token", "radiohead")
+
+        assertTrue(result.isFailure)
+        assertEquals("Music Assistant isn't set up in Home Assistant", result.exceptionOrNull()?.message)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `searchAlbums looks up the entry again after a failed search`() = runBlocking {
+        server.enqueue(MockResponse().setBody("OLDENTRY"))
+        server.enqueue(MockResponse().setResponseCode(400).setBody("{}"))
+        server.enqueue(MockResponse().setBody("NEWENTRY"))
+        server.enqueue(MockResponse().setBody(searchResponse))
+
+        assertTrue(repository.searchAlbums(baseUrl, "token", "radiohead").isFailure)
+        assertTrue(repository.searchAlbums(baseUrl, "token", "radiohead").isSuccess)
+
+        repeat(3) { server.takeRequest() }
+        val body = Gson().fromJson(server.takeRequest().body.readUtf8(), JsonObject::class.java)
+        assertEquals("NEWENTRY", body["config_entry_id"].asString)
     }
 }

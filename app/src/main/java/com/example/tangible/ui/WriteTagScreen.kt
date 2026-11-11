@@ -1,6 +1,5 @@
 package com.example.tangible.ui
 
-import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -27,12 +26,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.example.tangible.SPOTIFY_ALBUM_PARAM
+import com.example.tangible.data.AlbumSearchResult
 import com.example.tangible.data.MovieOption
 import com.example.tangible.data.MovieSearchResult
 import com.example.tangible.data.MovieService
 import com.example.tangible.data.MovieTag
-import com.example.tangible.data.SpotifyAlbum
+import com.example.tangible.data.MusicTag
 import kotlinx.coroutines.delay
 
 enum class TagType { MUSIC, MOVIE }
@@ -53,7 +52,7 @@ fun WriteTagScreen(
     writeError: String? = null,
     onTagInfoUpdate: (TagWriteInfo?) -> Unit,
     onWriteClick: (TagWriteInfo) -> Unit,
-    onSearchAlbums: suspend (String) -> List<SpotifyAlbum> = { emptyList() },
+    onSearchAlbums: suspend (String) -> Result<List<AlbumSearchResult>> = { Result.success(emptyList()) },
     onSearchMovies: suspend (String) -> List<MovieSearchResult> = { emptyList() }
 ) {
     var tagType by remember { mutableStateOf(TagType.MUSIC) }
@@ -61,9 +60,10 @@ fun WriteTagScreen(
     // Music state
     var url by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
-    var searchResults by remember { mutableStateOf<List<SpotifyAlbum>>(emptyList()) }
+    var searchResults by remember { mutableStateOf<List<AlbumSearchResult>>(emptyList()) }
+    var searchError by remember { mutableStateOf<String?>(null) }
     var isSearching by remember { mutableStateOf(false) }
-    var selectedAlbum by remember { mutableStateOf<SpotifyAlbum?>(null) }
+    var selectedAlbum by remember { mutableStateOf<AlbumSearchResult?>(null) }
 
     // Movie state
     var movieSearchQuery by remember { mutableStateOf("") }
@@ -90,7 +90,7 @@ fun WriteTagScreen(
                 TagType.MOVIE -> selectedMovie?.year ?: ""
             }
             val imageUrl = when (tagType) {
-                TagType.MUSIC -> selectedAlbum?.coverUrl
+                TagType.MUSIC -> selectedAlbum?.imageUrl
                 TagType.MOVIE -> selectedMovie?.posterUrl
             }
             TagWriteInfo(title = title, subtitle = subtitle, type = tagType, imageUrl = imageUrl, url = url)
@@ -119,7 +119,7 @@ fun WriteTagScreen(
     // The tag's URL
     LaunchedEffect(tagType, selectedAlbum, selectedMovie, selectedService) {
         url = when (tagType) {
-            TagType.MUSIC -> selectedAlbum?.let { "tangible://play?$SPOTIFY_ALBUM_PARAM=${Uri.encode(it.id)}" } ?: ""
+            TagType.MUSIC -> selectedAlbum?.let { MusicTag.build(it.uri) } ?: ""
             TagType.MOVIE -> {
                 val movie = selectedMovie
                 val option = movie?.options?.find { it.service == selectedService }
@@ -133,10 +133,13 @@ fun WriteTagScreen(
         if (searchQuery.length > 2) {
             isSearching = true
             delay(500)
-            searchResults = onSearchAlbums(searchQuery)
+            val result = onSearchAlbums(searchQuery)
+            searchResults = result.getOrDefault(emptyList())
+            searchError = result.exceptionOrNull()?.let { "Couldn't search Music Assistant: ${it.message}" }
             isSearching = false
         } else {
             searchResults = emptyList()
+            searchError = null
         }
     }
 
@@ -206,6 +209,7 @@ fun WriteTagScreen(
                 onMusicSearchQueryChange = { searchQuery = it },
                 isSearchingMusic = isSearching,
                 musicResults = searchResults,
+                musicSearchError = searchError,
                 onMusicResultSelected = { selectedAlbum = it },
                 movieSearchQuery = movieSearchQuery,
                 onMovieSearchQueryChange = { movieSearchQuery = it },
@@ -231,8 +235,9 @@ private fun WriteTagSearchContent(
     musicSearchQuery: String,
     onMusicSearchQueryChange: (String) -> Unit,
     isSearchingMusic: Boolean,
-    musicResults: List<SpotifyAlbum>,
-    onMusicResultSelected: (SpotifyAlbum) -> Unit,
+    musicResults: List<AlbumSearchResult>,
+    musicSearchError: String?,
+    onMusicResultSelected: (AlbumSearchResult) -> Unit,
     movieSearchQuery: String,
     onMovieSearchQueryChange: (String) -> Unit,
     isSearchingMovies: Boolean,
@@ -286,18 +291,25 @@ private fun WriteTagSearchContent(
                         }
                     }
                 )
+                if (musicSearchError != null) {
+                    Text(
+                        musicSearchError,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
                 if (musicResults.isNotEmpty()) {
                     SearchResultsCard {
                         items(musicResults) { result ->
                             ListItem(
                                 headlineContent = { Text(result.name) },
                                 supportingContent = {
-                                    val details = listOf(result.artistName, result.year).filter { it.isNotBlank() }
+                                    val details = listOf(result.artistName, result.version).filter { it.isNotBlank() }
                                     if (details.isNotEmpty()) Text(details.joinToString(" · "))
                                 },
                                 leadingContent = {
                                     AsyncImage(
-                                        model = result.thumbUrl,
+                                        model = result.imageUrl,
                                         contentDescription = null,
                                         modifier = Modifier.size(40.dp)
                                     )
@@ -352,7 +364,7 @@ private fun WriteTagSearchContent(
 @Composable
 private fun WriteTagConfirmContent(
     tagType: TagType,
-    selectedAlbum: SpotifyAlbum?,
+    selectedAlbum: AlbumSearchResult?,
     selectedMovie: MovieSearchResult?,
     movieOptions: List<MovieOption>?,
     selectedService: MovieService?,
@@ -392,7 +404,7 @@ private fun WriteTagConfirmContent(
             contentAlignment = Alignment.Center
         ) {
             val imageUrl = when (tagType) {
-                TagType.MUSIC -> selectedAlbum?.coverUrl
+                TagType.MUSIC -> selectedAlbum?.imageUrl
                 TagType.MOVIE -> selectedMovie?.posterUrl
             }
             val title = when (tagType) {

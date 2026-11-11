@@ -239,7 +239,7 @@ fun MusicAssistantScreen(
 
     SettingsSubPage(title = "Music", onBackClick = onBackClick) {
             Text(
-                text = "Tags play Spotify albums through Music Assistant. " +
+                text = "Tags play albums through Music Assistant. " +
                     "To play on several speakers at once, create a player group in Music Assistant and pick it below.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

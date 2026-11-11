@@ -24,11 +24,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        listOf(
-            "STREAMING_AVAILABILITY_API_KEY",
-            "SPOTIFY_CLIENT_ID",
-            "SPOTIFY_CLIENT_SECRET"
-        ).forEach { buildConfigField("String", it, "\"${secret(it)}\"") }
+        listOf("STREAMING_AVAILABILITY_API_KEY")
+            .forEach { buildConfigField("String", it, "\"${secret(it)}\"") }
     }
 
     buildTypes {
@@ -86,7 +83,6 @@ dependencies {
 
     implementation(libs.retrofit)
     implementation(libs.retrofit.gson)
-    implementation(libs.okhttp.logging)
     implementation(libs.coil.compose)
     implementation("com.google.code.gson:gson:2.10.1")
 

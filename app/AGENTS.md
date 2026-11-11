@@ -13,7 +13,8 @@ It's a personal project. It won't be published on the Play Store, so backwards c
 
 - Users stick NFC tags to their physical media.
 - They use the app to write what that media is to the tag:
-  - Music: `tangible://play?spotify_album=<spotify album id>`
+  - Music: `tangible://play?spotify_album=<spotify album id>`, or `tangible://play?album=<Music
+    Assistant URI>` for an album that isn't a Spotify one (see `data/MusicTag.kt`)
   - Movies: `tangible://movie?tmdb=<TMDB id>&<service key>=<content id>`
 - Scanning a tag (or tapping it in the collection) plays it on the player or TV set in Settings.
 
@@ -24,11 +25,16 @@ Everything plays through Home Assistant's REST API with a long-lived token
 
 ### Music (Music Assistant only)
 
-- Album search uses the Spotify Web API (client credentials), only when writing a tag. The tag
-  holds the album picked from the results.
+- Album search uses Music Assistant too (`music_assistant.search` with `?return_response`, which
+  needs the integration's config entry ID, read once with a template). There's no Spotify Web API
+  any more. A result has Music Assistant's URI for the album and a cover link. For a Spotify album
+  (`spotify://album/<id>` or `spotify--<instance>://album/<id>`) the tag keeps only the Spotify ID.
+  An album in the Music Assistant library may come back as `library://album/<n>` instead (not
+  seen yet); that URI goes on the tag as it is.
 - Playback uses the Music Assistant integration:
   - Players: `POST /api/template` with `integration_entities('music_assistant')`.
-  - Play: `music_assistant.play_media` with `media_id: spotify://album/<id>`, `enqueue: replace`.
+  - Play: `music_assistant.play_media` with `media_id: spotify://album/<id>` (or the tag's URI),
+    `enqueue: replace`.
   - Controls: `media_player.*` services; switching players: `music_assistant.transfer_queue`.
   - State: `GET /api/states/<entity>` (title, artist, artwork, position, volume).
 - Every music tag plays on the default player (Settings → Music → Player). There are no per-tag
@@ -102,8 +108,8 @@ Everything plays through Home Assistant's REST API with a long-lived token
 
 ## Secrets
 
-API keys (Streaming Availability, Spotify client ID/secret) live in
-`local.properties` (git-ignored) and reach the code through `BuildConfig` (see
+The API key (Streaming Availability) lives in
+`local.properties` (git-ignored) and reaches the code through `BuildConfig` (see
 `app/build.gradle.kts`). Never hard-code keys or tokens in tracked files.
 
 ## Development

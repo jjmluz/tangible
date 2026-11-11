@@ -45,14 +45,14 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Brush
+import com.example.tangible.data.AlbumSearchResult
 import com.example.tangible.data.HomeAssistantRepository
 import com.example.tangible.data.MovieOption
 import com.example.tangible.data.MovieSearchResult
 import com.example.tangible.data.PosterStore
 import com.example.tangible.data.MovieTag
+import com.example.tangible.data.MusicTag
 import com.example.tangible.data.MusicAssistantPlayer
-import com.example.tangible.data.SpotifyAlbum
-import com.example.tangible.data.SpotifyRepository
 import com.example.tangible.data.StreamingAvailabilityRepository
 import com.example.tangible.data.TagRepository
 import com.example.tangible.data.TvDevice
@@ -74,9 +74,6 @@ import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
-
-/** Music tags look like `tangible://play?spotify_album=<id>`. */
-const val SPOTIFY_ALBUM_PARAM = "spotify_album"
 
 /** The Google TV app and the action its Quick Settings "TV remote" tile uses to open the remote. */
 private const val GOOGLE_TV_PACKAGE = "com.google.android.videos"
@@ -141,9 +138,6 @@ class MainActivity : ComponentActivity() {
     private val posterStore by lazy {
         PosterStore(File(filesDir, "posters"), prefs, lookUpPosterUrl = { streamingRepository.posterUrl(it) })
     }
-    private val clientId = BuildConfig.SPOTIFY_CLIENT_ID
-    private val clientSecret = BuildConfig.SPOTIFY_CLIENT_SECRET
-    private val spotifyRepository by lazy { SpotifyRepository(clientId, clientSecret) }
     private val homeAssistantRepository by lazy { HomeAssistantRepository() }
     private val nowPlaying by lazy { NowPlaying.controller(this) }
     private val scanDebouncer = ScanDebouncer()
@@ -286,7 +280,7 @@ class MainActivity : ComponentActivity() {
                             dataToWrite = null
                             writeError = null
                         },
-                        onSearchAlbums = { query -> spotifyRepository.searchAlbums(query) },
+                        onSearchAlbums = { query -> homeAssistantRepository.searchAlbums(haServerUrl, haAccessToken, query) },
                         onSearchMovies = { query -> streamingRepository.searchMovies(query) },
                         onDeleteTags = { deleteTags(it) },
                         hasShownWelcomeWizard = hasShownWelcomeWizard,
@@ -467,20 +461,17 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        var spotifyAlbumId: String? = null
+        var albumUri: String? = null
         var movie: MovieOption? = null
 
         fun parseTangibleUri(uri: Uri) {
-            if (uri.scheme == "tangible" && (uri.host == "play" || uri.host == null)) {
-                spotifyAlbumId = uri.getQueryParameter(SPOTIFY_ALBUM_PARAM)?.takeIf { it.isNotBlank() }
-            } else {
-                movie = MovieTag.parse(uri)
-            }
+            albumUri = MusicTag.parse(uri)
+            if (albumUri == null) movie = MovieTag.parse(uri)
         }
 
         data?.let { parseTangibleUri(it) }
 
-        if (spotifyAlbumId == null && movie == null) {
+        if (albumUri == null && movie == null) {
             val rawMsgs = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES)
             rawMsgs?.forEach {
                 val msg = it as NdefMessage
@@ -491,7 +482,7 @@ class MainActivity : ComponentActivity() {
         }
 
         // A tap in the collection is deliberate; a scan can be the same tag read twice.
-        val scanKey = if (customTag == null && !isWritingMode) spotifyAlbumId ?: movie?.tvLink else null
+        val scanKey = if (customTag == null && !isWritingMode) albumUri ?: movie?.tvLink else null
         if (scanKey != null && scanDebouncer.isRepeat(scanKey)) {
             Log.d("Tangible", "Ignoring a repeated read of the same tag")
             return
@@ -503,11 +494,11 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        val albumId = spotifyAlbumId
-        if (albumId != null && !isWritingMode) {
+        val album = albumUri
+        if (album != null && !isWritingMode) {
             // Every music tag plays on the default player, from a scan or a tap in the collection.
             val preview = savedTag?.let { AlbumPreview(it.title, it.subtitle.ifBlank { null }, it.imageUrl) }
-            playOnMusicAssistant(albumId, selectedMaPlayerId, preview)
+            playOnMusicAssistant(album, selectedMaPlayerId, preview)
             return
         }
 
@@ -552,7 +543,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun playOnMusicAssistant(spotifyAlbumId: String, playerId: String?, preview: AlbumPreview? = null) {
+    private fun playOnMusicAssistant(albumUri: String, playerId: String?, preview: AlbumPreview? = null) {
         if (haServerUrl.isBlank() || haAccessToken.isBlank()) {
             Toast.makeText(this, "Set up Home Assistant in Settings first", Toast.LENGTH_LONG).show()
             return
@@ -561,7 +552,7 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "Pick a Music Assistant player in Settings", Toast.LENGTH_LONG).show()
             return
         }
-        nowPlaying.playbackStarting(playerId, preview, spotifyAlbumId)
+        nowPlaying.playbackStarting(playerId, preview, albumUri)
         openNowPlayingRequest++
         val volume = maDefaultVolume
         lifecycleScope.launch {
@@ -570,7 +561,7 @@ class MainActivity : ComponentActivity() {
                 homeAssistantRepository.setVolume(haServerUrl, haAccessToken, playerId, volume / 100f)
                     .onFailure { Log.w("Tangible", "Couldn't set the default volume: ${it.message}") }
             }
-            val result = homeAssistantRepository.playSpotifyAlbum(haServerUrl, haAccessToken, playerId, spotifyAlbumId)
+            val result = homeAssistantRepository.playAlbum(haServerUrl, haAccessToken, playerId, albumUri)
             nowPlaying.playbackStarted(result)
             result.onFailure { e ->
                 Toast.makeText(this@MainActivity, "Music Assistant playback failed: ${e.message}", Toast.LENGTH_LONG).show()
@@ -707,7 +698,7 @@ fun TangibleApp(
     tvError: String? = null,
     onStartWriting: (TagWriteInfo) -> Unit,
     onCancelWriting: () -> Unit,
-    onSearchAlbums: suspend (String) -> List<SpotifyAlbum>,
+    onSearchAlbums: suspend (String) -> Result<List<AlbumSearchResult>>,
     onSearchMovies: suspend (String) -> List<MovieSearchResult>,
     onDeleteTags: (Set<String>) -> Unit,
     hasShownWelcomeWizard: Boolean,

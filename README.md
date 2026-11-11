@@ -8,10 +8,10 @@ isn't published on the Play Store.
 
 ## How it works
 
-### Music: Spotify through Music Assistant
+### Music: Music Assistant
 
-- **Writing a tag:** search for the album (Spotify) and Tangible writes
-  `tangible://play?spotify_album=<id>` to the tag.
+- **Writing a tag:** search for the album (through Music Assistant, so on Spotify and in its
+  library) and Tangible writes `tangible://play?spotify_album=<id>` to the tag.
 - **Playing:** scanning the tag, or tapping it in the collection, asks
   [Music Assistant](https://music-assistant.io) to play the album on your default player, through
   Home Assistant's `music_assistant.play_media` action. To play on several speakers, create a
@@ -59,16 +59,14 @@ movie tags from before the Home Assistant change. Write them again.
 
 Needs JDK 17+ (Android Studio's bundled JBR works).
 
-API keys aren't in git. Add them to `local.properties` in the project root (git ignores it), or set
-them as environment variables with the same names:
+The one API key isn't in git. Add it to `local.properties` in the project root (git ignores it), or
+set it as an environment variable with the same name:
 
 ```properties
 STREAMING_AVAILABILITY_API_KEY=...
-SPOTIFY_CLIENT_ID=...
-SPOTIFY_CLIENT_SECRET=...
 ```
 
-They're compiled into `BuildConfig`. A missing key builds fine, but that feature's requests fail.
+It's compiled into `BuildConfig`. Without it the app builds fine, but movie search finds nothing.
 
 ```bash
 ./gradlew :app:testDebugUnitTest

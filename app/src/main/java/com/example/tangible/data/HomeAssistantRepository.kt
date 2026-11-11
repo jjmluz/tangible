@@ -72,9 +72,20 @@ data class PlayerStatus(
 /**
  * Talks to Home Assistant's REST API, using a long-lived access token.
  * Music goes through the `music_assistant.play_media` service, so Music Assistant handles
- * the streaming provider (Spotify) and the speakers, including groups.
+ * the music providers and the speakers, including groups.
  * Movies open on a TV as a deep link, through the Android TV Remote integration.
  */
+/** An album from a Music Assistant search. */
+data class AlbumSearchResult(
+    /** Music Assistant's URI for the album, e.g. `spotify--abc://album/<id>` or `library://album/12`. */
+    val uri: String,
+    val name: String,
+    val artistName: String = "",
+    /** The edition, e.g. "Deluxe" or "Remastered"; blank for the plain album. */
+    val version: String = "",
+    val imageUrl: String? = null
+)
+
 class HomeAssistantRepository(
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
@@ -85,6 +96,8 @@ class HomeAssistantRepository(
 ) {
     private val tag = "HomeAssistantRepository"
     private val json = "application/json".toMediaType()
+    /** The Music Assistant integration's config entry on a server, which its search action needs. */
+    private var musicAssistantEntry: Pair<String, String>? = null
 
     /** Lists the media players that belong to the Music Assistant integration. */
     suspend fun fetchPlayers(baseUrl: String, token: String): Result<List<MusicAssistantPlayer>> =
@@ -142,12 +155,62 @@ class HomeAssistantRepository(
             }
         }
 
-    /** Replaces the player's queue with the given Spotify album and starts playing it. */
-    suspend fun playSpotifyAlbum(
+    /** Searches albums on the music providers set up in Music Assistant, and in its library. */
+    suspend fun searchAlbums(baseUrl: String, token: String, query: String): Result<List<AlbumSearchResult>> =
+        call(baseUrl, token) { url ->
+            val body = JsonObject().apply {
+                addProperty("config_entry_id", musicAssistantEntryId(url, token))
+                addProperty("name", query)
+                add("media_type", JsonArray().apply { add("album") })
+                addProperty("limit", SEARCH_LIMIT)
+            }
+            val request = authorized("$url/api/services/music_assistant/search?return_response", token)
+                .post(body.toString().toRequestBody(json))
+                .build()
+            try {
+                execute(request) { text -> parseAlbums(gson.fromJson(text, JsonObject::class.java)) }
+            } catch (e: HomeAssistantException) {
+                // The integration may have been set up again since the entry was looked up.
+                musicAssistantEntry = null
+                throw e
+            }
+        }
+
+    private fun musicAssistantEntryId(url: String, token: String): String {
+        musicAssistantEntry?.let { (server, id) -> if (server == url) return id }
+        val body = JsonObject().apply { addProperty("template", CONFIG_ENTRY_TEMPLATE) }
+        val request = authorized("$url/api/template", token)
+            .post(body.toString().toRequestBody(json))
+            .build()
+        val id = execute(request) { it.trim() }
+        if (id.isEmpty()) throw HomeAssistantException("Music Assistant isn't set up in Home Assistant")
+        musicAssistantEntry = url to id
+        return id
+    }
+
+    private fun parseAlbums(response: JsonObject?): List<AlbumSearchResult> {
+        fun JsonObject.str(key: String) = get(key)?.takeUnless { it.isJsonNull }?.asString?.takeIf { it.isNotBlank() }
+        val albums = response?.getAsJsonObject("service_response")?.getAsJsonArray("albums") ?: return emptyList()
+        return albums.mapNotNull { element ->
+            val album = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
+            AlbumSearchResult(
+                uri = album.str("uri") ?: return@mapNotNull null,
+                name = album.str("name") ?: return@mapNotNull null,
+                artistName = album.get("artists")?.takeIf { it.isJsonArray }?.asJsonArray
+                    ?.mapNotNull { it.takeIf { a -> a.isJsonObject }?.asJsonObject?.str("name") }
+                    ?.joinToString(", ").orEmpty(),
+                version = album.str("version").orEmpty(),
+                imageUrl = album.str("image")
+            )
+        }.distinctBy { it.uri }
+    }
+
+    /** Replaces the player's queue with the album (a Music Assistant URI) and starts playing it. */
+    suspend fun playAlbum(
         baseUrl: String,
         token: String,
         entityId: String,
-        spotifyAlbumId: String
+        mediaUri: String
     ): Result<Unit> {
         if (entityId.isBlank()) {
             return Result.failure(IllegalArgumentException("No Music Assistant player selected"))
@@ -155,7 +218,7 @@ class HomeAssistantRepository(
         return call(baseUrl, token) { url ->
             val body = JsonObject().apply {
                 addProperty("entity_id", entityId)
-                addProperty("media_id", "spotify://album/$spotifyAlbumId")
+                addProperty("media_id", mediaUri)
                 addProperty("media_type", "album")
                 addProperty("enqueue", "replace")
             }
@@ -304,6 +367,11 @@ class HomeAssistantRepository(
     class HomeAssistantException(message: String) : IOException(message)
 
     companion object {
+        private const val SEARCH_LIMIT = 10
+
+        private const val CONFIG_ENTRY_TEMPLATE =
+            "{{ integration_entities('music_assistant') | map('config_entry_id') | reject('none') | first | default('', true) }}"
+
         private fun mediaPlayersTemplate(integration: String) = """
             {%- set ns = namespace(players=[]) -%}
             {%- for e in integration_entities('$integration') if e.startswith('media_player.') -%}
