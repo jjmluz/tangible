@@ -13,14 +13,27 @@ android {
         applicationId = "com.example.tangible"
         minSdk = 30
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        // CI passes these for releases (-PversionCode=… -PversionName=…); local builds use the defaults.
+        versionCode = providers.gradleProperty("versionCode").map(String::toInt).getOrElse(1)
+        versionName = providers.gradleProperty("versionName").getOrElse("1.0")
+    }
 
+    // CI signs releases with the keystore in the SIGNING_* secrets. Without them (local builds),
+    // release falls back to the debug key, which is fine for sideloading but not for the Play Store.
+    val releaseKeystore = providers.environmentVariable("SIGNING_KEYSTORE").orNull
+    signingConfigs {
+        if (releaseKeystore != null) create("release") {
+            storeFile = file(releaseKeystore)
+            storePassword = providers.environmentVariable("SIGNING_STORE_PASSWORD").get()
+            keyAlias = providers.environmentVariable("SIGNING_KEY_ALIAS").get()
+            keyPassword = providers.environmentVariable("SIGNING_KEY_PASSWORD").get()
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
