@@ -15,6 +15,8 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -35,9 +37,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.tangible.ui.TangibleBackground
-import com.example.tangible.ui.TangiblePurple
-import com.example.tangible.ui.TangibleSurface
 import com.example.tangible.ui.TangibleTheme
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -213,6 +212,9 @@ class MainActivity : ComponentActivity() {
         // Only a fresh launch: a recreated activity (rotation, theme change) still has the intent
         // of the last scan, and handling it again would restart the album.
         if (savedInstanceState == null) intent?.let { handleIntent(it) }
+
+        // Draws behind the system bars and keeps their icons readable in light and dark.
+        enableEdgeToEdge()
 
         setContent {
             TangibleTheme {
@@ -797,22 +799,10 @@ fun TangibleApp(
                                     color = MaterialTheme.colorScheme.onBackground
                                 )
                             } else {
-                                Row(verticalAlignment = Alignment.Bottom) {
-                                    Text(
-                                        text = "Tangible",
-                                        style = MaterialTheme.typography.headlineMedium,
-                                        color = TangiblePurple
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Tap to Play",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Light,
-                                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                                        color = Color(0xFF888899),
-                                        modifier = Modifier.padding(bottom = 4.dp)
-                                    )
-                                }
+                                Text(
+                                    text = "Tangible",
+                                    style = MaterialTheme.typography.headlineSmall
+                                )
                             }
                         } else {
                             Text(
@@ -822,6 +812,13 @@ fun TangibleApp(
                             )
                         }
                     },
+                    navigationIcon = {
+                        if (lastChromeRoute == "settings") {
+                            IconButton(onClick = { navController.popBackStack("collection", inclusive = false) }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            }
+                        }
+                    },
                     actions = {
                         if (currentRoute == "collection" && selectedTagIds.isNotEmpty()) {
                             IconButton(onClick = { showDeleteConfirmation = true }) {
@@ -829,6 +826,14 @@ fun TangibleApp(
                                     imageVector = Icons.Default.Delete,
                                     contentDescription = "Delete",
                                     tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        } else if (currentRoute == "collection") {
+                            IconButton(onClick = { navController.navigate("settings") { launchSingleTop = true } }) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "Settings",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         } else if (currentRoute == "settings") {
@@ -842,33 +847,12 @@ fun TangibleApp(
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = TangibleBackground
+                        containerColor = MaterialTheme.colorScheme.surface
                     )
                 )
             }
         },
-        bottomBar = {
-            if (chromeVisible) {
-                TangibleBottomBar(
-                    currentRoute = lastChromeRoute,
-                    onCollectionClick = {
-                        navController.navigate("collection") {
-                            popUpTo("collection") { inclusive = false }
-                            launchSingleTop = true
-                        }
-                    },
-                    onWriteClick = { navController.navigate("write_tag") },
-                    onSettingsClick = {
-                        navController.navigate("settings") {
-                            popUpTo("collection") { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
-                )
-            }
-        },
-        containerColor = TangibleBackground
+        containerColor = MaterialTheme.colorScheme.surface
     ) { innerPadding ->
         if (showDeleteConfirmation) {
             AlertDialog(
@@ -941,18 +925,33 @@ fun TangibleApp(
                     onViewModeChange = onViewModeChange,
                     isNfcTagLaunchBlocked = isNfcTagLaunchBlocked,
                     onFixNfcTagLaunch = onFixNfcTagLaunch,
-                    bottomContentPadding = if (miniStatus != null) 184.dp else 112.dp
+                    bottomContentPadding = innerPadding.calculateBottomPadding() +
+                        (if (miniStatus != null) 188.dp else 100.dp)
                 )
-                if (miniStatus != null && nowPlaying != null) {
-                    MiniPlayer(
-                        status = miniStatus,
-                        onClick = { navController.navigate("now_playing") { launchSingleTop = true } },
-                        onPlayPause = { nowPlaying.playPause() },
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = innerPadding.calculateBottomPadding() + 4.dp)
-                    )
+                // Write tag sits above the mini player; both float over the end of the list.
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = innerPadding.calculateBottomPadding() + 12.dp),
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (selectedTagIds.isEmpty()) {
+                        ExtendedFloatingActionButton(
+                            onClick = { navController.navigate("write_tag") },
+                            icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                            text = { Text("Write tag") }
+                        )
+                    }
+                    if (miniStatus != null && nowPlaying != null) {
+                        MiniPlayer(
+                            status = miniStatus,
+                            onClick = { navController.navigate("now_playing") { launchSingleTop = true } },
+                            onPlayPause = { nowPlaying.playPause() }
+                        )
+                    }
                 }
                 }
             }
@@ -1048,132 +1047,5 @@ fun TangibleApp(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun TangibleBottomBar(
-    currentRoute: String?,
-    onCollectionClick: () -> Unit,
-    onWriteClick: () -> Unit,
-    onSettingsClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(96.dp)
-    ) {
-        // Left gradient bar
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.5f)
-                .height(96.dp)
-                .align(Alignment.BottomStart)
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, TangibleBackground),
-                        endY = 120f
-                    )
-                )
-        )
-
-        // Right gradient bar
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.5f)
-                .height(96.dp)
-                .align(Alignment.BottomEnd)
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, TangibleBackground),
-                        endY = 120f
-                    )
-                )
-        )
-
-        // Solid background for the bottom part of the bar
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(72.dp)
-                .align(Alignment.BottomCenter)
-                .background(TangibleBackground)
-        )
-
-        // Navigation items
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(72.dp)
-                .align(Alignment.BottomCenter)
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            BottomNavItem(
-                icon = Icons.Default.VideoLibrary,
-                label = "Collection",
-                selected = currentRoute == "collection",
-                onClick = onCollectionClick,
-                modifier = Modifier.weight(1f)
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            BottomNavItem(
-                icon = Icons.Default.Settings,
-                label = "Settings",
-                selected = currentRoute == "settings",
-                onClick = onSettingsClick,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        FloatingActionButton(
-            onClick = onWriteClick,
-            modifier = Modifier
-                .size(60.dp)
-                .align(Alignment.TopCenter),
-            containerColor = TangiblePurple,
-            elevation = FloatingActionButtonDefaults.elevation(
-                defaultElevation = 8.dp,
-                pressedElevation = 12.dp
-            )
-        ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "Write Tag",
-                tint = Color.White,
-                modifier = Modifier.size(28.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun BottomNavItem(
-    icon: ImageVector,
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val tint = if (selected) TangiblePurple else Color(0xFF888899)
-    Column(
-        modifier = modifier
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = tint,
-            modifier = Modifier.size(24.dp)
-        )
-        Spacer(modifier = Modifier.height(3.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = tint
-        )
     }
 }

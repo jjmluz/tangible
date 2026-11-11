@@ -178,10 +178,10 @@ fun WriteTagScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         },
-        containerColor = TangibleBackground
+        containerColor = MaterialTheme.colorScheme.surface
     ) { padding ->
         if (showConfirmScreen) {
             WriteTagConfirmContent(

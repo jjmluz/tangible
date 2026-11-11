@@ -1,7 +1,15 @@
 package com.example.tangible.ui
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import kotlin.math.PI
+import kotlin.math.sin
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -55,12 +63,7 @@ fun NowPlayingScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    0f to TangiblePurpleDark.copy(alpha = 0.45f),
-                    0.55f to TangibleBackground
-                )
-            )
+            .background(MaterialTheme.colorScheme.surfaceContainer)
     ) {
         Column(
             modifier = Modifier
@@ -109,7 +112,7 @@ fun NowPlayingScreen(
             when {
                 playerId == null -> Message("Pick a player in Settings → Music Assistant")
                 status == null && error == null -> {
-                    CircularProgressIndicator(color = TangiblePurple, modifier = Modifier.padding(24.dp))
+                    CircularProgressIndicator(modifier = Modifier.padding(24.dp))
                 }
                 status != null && !status.isAvailable -> Message("$playerName is unavailable")
                 status != null && !status.hasMedia && !isStarting -> {
@@ -124,34 +127,45 @@ fun NowPlayingScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // One connected group: tonal Previous/Next round on the outside, and a wide primary
+            // Play/Pause that is a pill while paused and squarer while playing.
+            val playCorner by animateDpAsState(if (status?.isPlaying == true) 24.dp else 40.dp, label = "playCorner")
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = Modifier.widthIn(max = 360.dp).fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onPrevious, enabled = canControl, modifier = Modifier.size(64.dp)) {
-                    Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", modifier = Modifier.size(40.dp))
+                FilledTonalIconButton(
+                    onClick = onPrevious,
+                    enabled = canControl,
+                    modifier = Modifier.weight(1f).height(80.dp),
+                    shape = RoundedCornerShape(topStart = 40.dp, bottomStart = 40.dp, topEnd = 12.dp, bottomEnd = 12.dp)
+                ) {
+                    Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", modifier = Modifier.size(32.dp))
                 }
                 FilledIconButton(
                     onClick = onPlayPause,
                     enabled = canControl && !isStarting,
-                    modifier = Modifier.size(80.dp),
-                    shape = CircleShape,
-                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = TangiblePurple)
+                    modifier = Modifier.weight(1.6f).height(80.dp),
+                    shape = RoundedCornerShape(playCorner)
                 ) {
                     if (isStarting) {
-                        CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp, modifier = Modifier.size(32.dp))
+                        CircularProgressIndicator(color = LocalContentColor.current, strokeWidth = 3.dp, modifier = Modifier.size(32.dp))
                     } else {
                         Icon(
                             imageVector = if (status?.isPlaying == true) Icons.Default.Pause else Icons.Default.PlayArrow,
                             contentDescription = if (status?.isPlaying == true) "Pause" else "Play",
-                            tint = Color.White,
-                            modifier = Modifier.size(44.dp)
+                            modifier = Modifier.size(40.dp)
                         )
                     }
                 }
-                IconButton(onClick = onNext, enabled = canControl, modifier = Modifier.size(64.dp)) {
-                    Icon(Icons.Default.SkipNext, contentDescription = "Next", modifier = Modifier.size(40.dp))
+                FilledTonalIconButton(
+                    onClick = onNext,
+                    enabled = canControl,
+                    modifier = Modifier.weight(1f).height(80.dp),
+                    shape = RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp, topEnd = 40.dp, bottomEnd = 40.dp)
+                ) {
+                    Icon(Icons.Default.SkipNext, contentDescription = "Next", modifier = Modifier.size(32.dp))
                 }
             }
 
@@ -206,19 +220,19 @@ fun MiniPlayer(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .shadow(12.dp, RoundedCornerShape(16.dp))
-            .clip(RoundedCornerShape(16.dp))
+            .shadow(6.dp, RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(24.dp))
             .clickable(onClick = onClick)
             .testTag("mini_player"),
-        color = TangibleSurfaceVariant,
-        shape = RoundedCornerShape(16.dp)
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(24.dp)
     ) {
         Column {
             Row(
-                modifier = Modifier.padding(start = 8.dp, end = 4.dp, top = 8.dp, bottom = 6.dp),
+                modifier = Modifier.padding(start = 12.dp, end = 10.dp, top = 12.dp, bottom = 9.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Artwork(url = status.artworkUrl, modifier = Modifier.size(44.dp), cornerRadius = 8)
+                Artwork(url = status.artworkUrl, modifier = Modifier.size(48.dp), cornerRadius = 12)
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -236,11 +250,14 @@ fun MiniPlayer(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                IconButton(onClick = onPlayPause) {
+                FilledIconButton(
+                    onClick = onPlayPause,
+                    modifier = Modifier.size(width = 52.dp, height = 44.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
                     Icon(
                         imageVector = if (status.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = if (status.isPlaying) "Pause" else "Play",
-                        modifier = Modifier.size(30.dp)
+                        contentDescription = if (status.isPlaying) "Pause" else "Play"
                     )
                 }
             }
@@ -248,9 +265,11 @@ fun MiniPlayer(
                 progress = { progress ?: 0f },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(2.dp),
-                color = TangiblePurple,
-                trackColor = Color.Transparent
+                    .padding(horizontal = 24.dp)
+                    .height(3.dp),
+                trackColor = Color.Transparent,
+                gapSize = 0.dp,
+                drawStopIndicator = {}
             )
         }
     }
@@ -261,16 +280,17 @@ private fun PlayerChip(name: String, isBusy: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(50),
-        color = Color.White.copy(alpha = 0.08f)
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
     ) {
         Row(
-            modifier = Modifier.padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (isBusy) {
-                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp), color = TangiblePurple)
+                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp), color = LocalContentColor.current)
             } else {
-                Icon(Icons.Default.Speaker, contentDescription = null, tint = TangiblePurple, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Speaker, contentDescription = null, modifier = Modifier.size(18.dp))
             }
             Spacer(modifier = Modifier.width(8.dp))
             Text(name, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -280,13 +300,13 @@ private fun PlayerChip(name: String, isBusy: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun Artwork(url: String?, modifier: Modifier = Modifier, cornerRadius: Int = 20) {
+private fun Artwork(url: String?, modifier: Modifier = Modifier, cornerRadius: Int = 36) {
     val shape = RoundedCornerShape(cornerRadius.dp)
     Box(
         modifier = modifier
-            .shadow(if (cornerRadius > 12) 24.dp else 0.dp, shape)
+            .shadow(if (cornerRadius > 12) 12.dp else 0.dp, shape)
             .clip(shape)
-            .background(TangibleSurfaceVariant),
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
         contentAlignment = Alignment.Center
     ) {
         Icon(
@@ -308,12 +328,11 @@ private fun Artwork(url: String?, modifier: Modifier = Modifier, cornerRadius: I
 
 @Composable
 private fun TrackInfo(status: PlayerStatus?) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = status?.title ?: "Starting…",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.SemiBold,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
@@ -324,10 +343,48 @@ private fun TrackInfo(status: PlayerStatus?) {
                 text = subtitle,
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
+        }
+    }
+}
+
+/**
+ * The seek bar's track: a wave up to the thumb while music plays (a straight line when paused),
+ * and a thin straight line for what's left.
+ */
+@Composable
+private fun WavyTrack(fraction: Float, wavy: Boolean, enabled: Boolean) {
+    val active = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    val inactive = if (enabled) MaterialTheme.colorScheme.outlineVariant else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+    val amplitude by animateDpAsState(if (wavy) 3.dp else 0.dp, label = "waveAmplitude")
+    Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(16.dp)
+    ) {
+        val centerY = size.height / 2
+        val stroke = 4.dp.toPx()
+        val gap = 8.dp.toPx()
+        val thumbX = size.width * fraction.coerceIn(0f, 1f)
+        val activeEnd = thumbX - gap
+        if (activeEnd > 0f) {
+            val wavelength = 24.dp.toPx()
+            val amp = amplitude.toPx()
+            val path = Path().apply {
+                moveTo(0f, centerY)
+                var x = 0f
+                while (x < activeEnd) {
+                    x = minOf(x + 2f, activeEnd)
+                    lineTo(x, centerY + amp * sin(x / wavelength * 2f * PI.toFloat()))
+                }
+            }
+            drawPath(path, active, style = Stroke(width = stroke, cap = StrokeCap.Round))
+        }
+        val inactiveStart = thumbX + gap
+        if (inactiveStart < size.width) {
+            drawLine(inactive, Offset(inactiveStart, centerY), Offset(size.width, centerY), stroke, StrokeCap.Round)
         }
     }
 }
@@ -361,7 +418,13 @@ private fun ProgressBar(status: PlayerStatus?, now: Long, enabled: Boolean, onSe
                 if (target != null && duration != null) onSeek(target * duration)
             },
             enabled = enabled && duration != null,
-            colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = TangiblePurple),
+            track = {
+                WavyTrack(
+                    fraction = fraction,
+                    wavy = status?.isPlaying == true,
+                    enabled = enabled && duration != null
+                )
+            },
             modifier = Modifier.testTag("progress")
         )
         Row(modifier = Modifier.fillMaxWidth()) {
@@ -386,7 +449,6 @@ private fun VolumeBar(volume: Float?, enabled: Boolean, onVolumeChange: (Float) 
                 dragVolume = null
             },
             enabled = enabled,
-            colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = Color.White.copy(alpha = 0.8f)),
             modifier = Modifier
                 .weight(1f)
                 .padding(horizontal = 8.dp)
@@ -408,7 +470,7 @@ private fun PlayerPickerSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = TangibleSurface
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Text(
             text = if (movesPlayback) "Move playback to" else "Show player",
@@ -435,7 +497,7 @@ internal fun PlayerPickerList(
                 supportingContent = { Text(player.state.replaceFirstChar { it.uppercase() }) },
                 leadingContent = { Icon(Icons.Default.Speaker, contentDescription = null) },
                 trailingContent = {
-                    if (player.entityId == currentId) Icon(Icons.Default.Check, contentDescription = "Current", tint = TangiblePurple)
+                    if (player.entityId == currentId) Icon(Icons.Default.Check, contentDescription = "Current", tint = MaterialTheme.colorScheme.primary)
                 },
                 colors = if (available) {
                     ListItemDefaults.colors(containerColor = Color.Transparent)

@@ -1,5 +1,6 @@
 package com.example.tangible.ui
 
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -7,6 +8,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import com.example.tangible.data.MusicAssistantPlayer
 import com.example.tangible.data.PlayerStatus
 import org.junit.Assert.assertEquals
@@ -55,8 +57,10 @@ class NowPlayingScreenTest {
         composeTestRule.onNodeWithText("3:28").assertIsDisplayed()
 
         composeTestRule.onNodeWithContentDescription("Pause").performClick()
-        composeTestRule.onNodeWithContentDescription("Next").performClick()
-        composeTestRule.onNodeWithContentDescription("Previous").performClick()
+        // Previous and Next have uneven corners, and Robolectric can't hit-test a tap against
+        // that outline, so they get the click action directly.
+        composeTestRule.onNodeWithContentDescription("Next").performSemanticsAction(SemanticsActions.OnClick)
+        composeTestRule.onNodeWithContentDescription("Previous").performSemanticsAction(SemanticsActions.OnClick)
         composeTestRule.onNodeWithContentDescription("Close").performClick()
         assertEquals(listOf("playPause", "next", "previous", "close"), calls)
     }

@@ -57,10 +57,10 @@ fun SettingsScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(TangibleBackground)
+            .background(MaterialTheme.colorScheme.surface)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
-            .padding(top = 8.dp, bottom = 112.dp)
+            .padding(top = 8.dp, bottom = 48.dp)
     ) {
         SectionHeader("Home Assistant")
         Spacer(Modifier.height(8.dp))
@@ -95,7 +95,7 @@ private fun SectionHeader(title: String) {
     Text(
         text = title.uppercase(),
         style = MaterialTheme.typography.labelMedium,
-        color = TangiblePurple,
+        color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
     )
 }
@@ -106,7 +106,7 @@ private fun SettingsItem(title: String, value: String, onClick: () -> Unit) {
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        color = TangibleSurface
+        color = MaterialTheme.colorScheme.surfaceContainer
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
@@ -203,10 +203,10 @@ private fun SettingsSubPage(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = TangibleBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         },
-        containerColor = TangibleBackground
+        containerColor = MaterialTheme.colorScheme.surface
     ) { padding ->
         Column(
             modifier = Modifier
@@ -284,7 +284,7 @@ internal fun DefaultVolumeSection(volume: Int?, onVolumeChange: (Int?) -> Unit) 
     Text(
         text = "PLAYBACK",
         style = MaterialTheme.typography.labelMedium,
-        color = TangiblePurple,
+        color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(horizontal = 20.dp)
     )
     ListItem(
@@ -302,7 +302,7 @@ internal fun DefaultVolumeSection(volume: Int?, onVolumeChange: (Int?) -> Unit) 
                 modifier = Modifier.testTag("default_volume_switch")
             )
         },
-        colors = ListItemDefaults.colors(containerColor = TangibleBackground),
+        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
         modifier = Modifier.padding(horizontal = 4.dp)
     )
     if (volume != null) {
@@ -459,13 +459,13 @@ private fun DeviceSection(
         Text(
             text = title.uppercase(),
             style = MaterialTheme.typography.labelMedium,
-            color = TangiblePurple
+            color = MaterialTheme.colorScheme.primary
         )
         if (isRefreshing) {
             CircularProgressIndicator(
                 modifier = Modifier.size(24.dp),
                 strokeWidth = 2.dp,
-                color = TangiblePurple
+                color = MaterialTheme.colorScheme.primary
             )
         } else {
             IconButton(onClick = onRefresh) {

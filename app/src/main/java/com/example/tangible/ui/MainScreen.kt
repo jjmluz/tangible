@@ -1,5 +1,7 @@
 package com.example.tangible.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -8,7 +10,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
@@ -104,11 +107,13 @@ fun MainScreen(
             if (viewMode == ViewMode.LIST) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(top = 72.dp, bottom = bottomContentPadding)
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 76.dp, bottom = bottomContentPadding),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    items(filteredTags, key = { it.id }) { tag ->
+                    itemsIndexed(filteredTags, key = { _, tag -> tag.id }) { index, tag ->
                         TagRow(
                             tag = tag,
+                            shape = groupedRowShape(index, filteredTags.size),
                             isSelected = tag.id in selectedTagIds,
                             isSelectionMode = selectedTagIds.isNotEmpty(),
                             onPlay = { onPlay(tag) },
@@ -144,40 +149,33 @@ fun MainScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(TangibleBackground)
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    SingleChoiceSegmentedButtonRow(
-                        modifier = Modifier.weight(1f)
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        SegmentedButton(
+                        TypeButton(
+                            label = "Music",
+                            icon = Icons.Default.MusicNote,
                             selected = selectedType == "MUSIC",
+                            isFirst = true,
                             onClick = { selectedType = "MUSIC" },
-                            shape = SegmentedButtonDefaults.itemShape(
-                                index = 0,
-                                count = 2,
-                                baseShape = RoundedCornerShape(8.dp)
-                            ),
-                            icon = { Icon(Icons.Default.MusicNote, contentDescription = null) }
-                        ) {
-                            Text("Music")
-                        }
-                        SegmentedButton(
+                            modifier = Modifier.weight(1f)
+                        )
+                        TypeButton(
+                            label = "Movies",
+                            icon = Icons.Default.Movie,
                             selected = selectedType == "MOVIE",
+                            isFirst = false,
                             onClick = { selectedType = "MOVIE" },
-                            shape = SegmentedButtonDefaults.itemShape(
-                                index = 1,
-                                count = 2,
-                                baseShape = RoundedCornerShape(8.dp)
-                            ),
-                            icon = { Icon(Icons.Default.Movie, contentDescription = null) }
-                        ) {
-                            Text("Movies")
-                        }
+                            modifier = Modifier.weight(1f)
+                        )
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
 
                     IconButton(
                         onClick = {
@@ -187,7 +185,7 @@ fun MainScreen(
                         Icon(
                             imageVector = if (viewMode == ViewMode.LIST) Icons.AutoMirrored.Filled.List else Icons.Default.GridView,
                             contentDescription = "Switch View Mode",
-                            tint = MaterialTheme.colorScheme.onSurface
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
@@ -209,7 +207,10 @@ fun MainScreen(
                         .height(16.dp)
                         .background(
                             brush = Brush.verticalGradient(
-                                colors = listOf(TangibleBackground, Color.Transparent)
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.surface,
+                                    MaterialTheme.colorScheme.surface.copy(alpha = 0f)
+                                )
                             )
                         )
                 )
@@ -217,6 +218,52 @@ fun MainScreen(
         }
     }
     }
+}
+
+/**
+ * One half of the Music/Movies switch: the selected half is a full pill in the primary colour,
+ * the other is tonal with tighter corners on the side where the two meet.
+ */
+@Composable
+private fun TypeButton(
+    label: String,
+    icon: ImageVector,
+    selected: Boolean,
+    isFirst: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val inner by animateDpAsState(if (selected) 24.dp else 8.dp, label = "typeButtonCorner")
+    val shape = if (isFirst) {
+        RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp, topEnd = inner, bottomEnd = inner)
+    } else {
+        RoundedCornerShape(topStart = inner, bottomStart = inner, topEnd = 24.dp, bottomEnd = 24.dp)
+    }
+    Surface(
+        selected = selected,
+        onClick = onClick,
+        modifier = modifier.height(48.dp),
+        shape = shape,
+        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(label, style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+/** Rows read as one group: big corners on the outside, small ones where rows meet. */
+private fun groupedRowShape(index: Int, count: Int): RoundedCornerShape {
+    val top = if (index == 0) 24.dp else 6.dp
+    val bottom = if (index == count - 1) 24.dp else 6.dp
+    return RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom)
 }
 
 /** Shown when Android's per-app NFC setting stops tags from opening Tangible. */
@@ -266,7 +313,7 @@ fun SortMenu(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.Sort,
                 contentDescription = "Sort",
-                tint = MaterialTheme.colorScheme.onSurface
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -278,9 +325,9 @@ fun SortMenu(
                 text = "Sort by",
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 style = MaterialTheme.typography.labelLarge,
-                color = TangiblePurple
+                color = MaterialTheme.colorScheme.primary
             )
-            
+
             SortField.entries.forEach { field ->
                 DropdownMenuItem(
                     text = {
@@ -325,40 +372,46 @@ fun SortMenu(
 @Composable
 private fun TagRow(
     tag: SavedTag,
+    shape: RoundedCornerShape,
     isSelected: Boolean,
     isSelectionMode: Boolean,
     onPlay: () -> Unit,
     onTagClick: () -> Unit,
     onTagLongClick: () -> Unit
 ) {
+    val container by animateColorAsState(
+        if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+        label = "tagRowContainer"
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(shape)
+            .background(container)
             .combinedClickable(
                 // A tap plays the album or movie; a long press starts selecting.
                 onClick = { if (isSelectionMode) onTagClick() else onPlay() },
                 onLongClick = onTagLongClick
             )
-            .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else Color.Transparent)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(start = 12.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Cover art
         Box(
             modifier = Modifier
-                .width(72.dp)
-                .height(72.dp),
+                .width(60.dp)
+                .height(60.dp),
             contentAlignment = Alignment.Center
         ) {
             val imageModifier = if (tag.type == "MOVIE") {
                 Modifier
-                    .width(48.dp)
-                    .height(72.dp)
+                    .width(40.dp)
+                    .height(60.dp)
             } else {
-                Modifier.size(72.dp)
+                Modifier.size(60.dp)
             }
             Box(
-                modifier = imageModifier.clip(RoundedCornerShape(8.dp)),
+                modifier = imageModifier.clip(RoundedCornerShape(if (tag.type == "MOVIE") 8.dp else 14.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 if (tag.imageUrl != null) {
@@ -395,15 +448,15 @@ private fun TagRow(
             Text(
                 text = tag.title,
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.height(3.dp))
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = tag.subtitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -412,8 +465,7 @@ private fun TagRow(
         if (isSelectionMode) {
             Checkbox(
                 checked = isSelected,
-                onCheckedChange = { onTagClick() },
-                colors = CheckboxDefaults.colors(checkedColor = TangiblePurple)
+                onCheckedChange = { onTagClick() }
             )
         }
     }
@@ -431,13 +483,13 @@ private fun TagGridItem(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer)
             .combinedClickable(
                 // A tap plays the album or movie; a long press starts selecting.
                 onClick = { if (isSelectionMode) onTagClick() else onPlay() },
                 onLongClick = onTagLongClick
             )
-            .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else Color.Transparent)
             .padding(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -456,7 +508,7 @@ private fun TagGridItem(
                 Modifier.fillMaxSize()
             }
             Box(
-                modifier = imageModifier.clip(RoundedCornerShape(4.dp)),
+                modifier = imageModifier.clip(RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 if (tag.imageUrl != null) {

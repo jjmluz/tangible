@@ -81,7 +81,7 @@ fun WelcomeWizardScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(TangiblePurple)
+            .background(MaterialTheme.colorScheme.primaryContainer)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             HorizontalPager(
@@ -107,7 +107,7 @@ fun WelcomeWizardScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     repeat(pages.size) { iteration ->
-                        val color = if (pagerState.currentPage == iteration) Color.White else Color.White.copy(alpha = 0.3f)
+                        val color = if (pagerState.currentPage == iteration) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.3f)
                         Box(
                             modifier = Modifier
                                 .size(8.dp)
@@ -128,8 +128,8 @@ fun WelcomeWizardScreen(
                             onDismiss()
                         }
                     },
-                    containerColor = Color.White,
-                    contentColor = TangiblePurple,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
                     shape = CircleShape
                 ) {
                     Icon(
@@ -162,7 +162,7 @@ private fun OnboardingPageContent(page: OnboardingPage) {
                 painter = page.icon,
                 contentDescription = null,
                 modifier = Modifier.size(120.dp),
-                tint = Color.White
+                tint = MaterialTheme.colorScheme.onPrimaryContainer
             )
         }
 
@@ -180,14 +180,14 @@ private fun OnboardingPageContent(page: OnboardingPage) {
                 text = page.title,
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
                 textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
                 text = page.description,
                 style = MaterialTheme.typography.bodyLarge,
-                color = Color.White.copy(alpha = 0.8f),
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
                 textAlign = TextAlign.Center,
                 lineHeight = 24.sp
             )
