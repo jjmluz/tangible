@@ -9,12 +9,15 @@ Store: you build it yourself.
 
 <p>
   <img src="docs/screenshots/music.png" width="260" alt="Music collection: a grid of album covers">
+  <img src="docs/screenshots/now-playing.png" width="260" alt="Now playing: album art, track progress, playback controls and volume for the selected speaker">
   <img src="docs/screenshots/movies.png" width="260" alt="Movie collection: a grid of movie posters">
-  <img src="docs/screenshots/search.png" width="260" alt="Writing a tag: searching albums">
 </p>
 <p>
+  <img src="docs/screenshots/search.png" width="260" alt="Writing a tag: searching albums">
   <img src="docs/screenshots/write.png" width="260" alt="Writing a tag: an album, waiting for the tag">
   <img src="docs/screenshots/write-movie.png" width="260" alt="Writing a tag: a movie, picking the streaming service it opens in">
+</p>
+<p>
   <img src="docs/screenshots/streaming.png" width="260" alt="Settings: API key, region and streaming services">
 </p>
 
