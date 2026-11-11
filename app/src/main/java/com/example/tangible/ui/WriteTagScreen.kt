@@ -1,6 +1,29 @@
 package com.example.tangible.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.rememberScrollState
@@ -50,6 +73,8 @@ fun WriteTagScreen(
     onBackClick: () -> Unit,
     isWriting: Boolean = false,
     writeError: String? = null,
+    writeSucceeded: Boolean = false,
+    onDone: () -> Unit = {},
     onTagInfoUpdate: (TagWriteInfo?) -> Unit,
     onWriteClick: (TagWriteInfo) -> Unit,
     onSearchAlbums: suspend (String) -> Result<List<AlbumSearchResult>> = { Result.success(emptyList()) },
@@ -194,6 +219,8 @@ fun WriteTagScreen(
                 url = url,
                 writeError = writeError,
                 isWriting = isWriting,
+                writeSucceeded = writeSucceeded,
+                onDone = onDone,
                 onWriteClick = {
                     currentTagInfo?.let { onWriteClick(it) }
                 },
@@ -373,8 +400,25 @@ private fun WriteTagConfirmContent(
     writeError: String?,
     onWriteClick: () -> Unit,
     modifier: Modifier = Modifier,
-    isWriting: Boolean = false
+    isWriting: Boolean = false,
+    writeSucceeded: Boolean = false,
+    onDone: () -> Unit = {}
 ) {
+    val result = when {
+        writeSucceeded -> WriteResult.SUCCESS
+        writeError != null -> WriteResult.FAILURE
+        else -> null
+    }
+    val resultColors = result?.let { writeResultColors(it) }
+    val haptics = LocalHapticFeedback.current
+    LaunchedEffect(result) {
+        when (result) {
+            WriteResult.SUCCESS -> haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+            WriteResult.FAILURE -> haptics.performHapticFeedback(HapticFeedbackType.Reject)
+            null -> Unit
+        }
+    }
+
     var showUrlPreview by remember { mutableStateOf(false) }
 
     if (showUrlPreview) {
@@ -417,7 +461,11 @@ private fun WriteTagConfirmContent(
             }
 
             Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
+                // The padding leaves room for the result glow around the cover; a scrolling
+                // column clips what's drawn above and below it.
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .padding(vertical = 56.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -428,12 +476,19 @@ private fun WriteTagConfirmContent(
                 } else {
                     Modifier.size(280.dp)
                 }
-                AsyncImage(
-                    model = imageUrl,
-                    contentDescription = null,
-                    modifier = imageModifier.clip(RoundedCornerShape(12.dp)),
-                    contentScale = ContentScale.Crop
-                )
+                ResultCover(result = result, colors = resultColors, modifier = imageModifier) {
+                    AsyncImage(
+                        model = imageUrl,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        // A failed write drains the cover's colour.
+                        colorFilter = if (result == WriteResult.FAILURE) {
+                            ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0.3f) })
+                        } else null
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     title,
                     style = MaterialTheme.typography.headlineSmall,
@@ -464,20 +519,35 @@ private fun WriteTagConfirmContent(
             }
         }
 
-        if (writeError != null) {
-            Text(
-                text = writeError,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
+        if (result != null && resultColors != null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = if (result == WriteResult.SUCCESS) "Tag written. Scan it to play." else "Couldn't write the tag",
+                    color = resultColors.accent,
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center
+                )
+                if (result == WriteResult.FAILURE && writeError != null) {
+                    Text(
+                        text = writeError,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
         }
 
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
+            if (result != WriteResult.SUCCESS) Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
@@ -491,10 +561,24 @@ private fun WriteTagConfirmContent(
                 }
             }
 
-            if (isWriting) {
+            if (result == WriteResult.SUCCESS && resultColors != null) {
+                Button(
+                    onClick = onDone,
+                    shape = RoundedCornerShape(28.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = resultColors.accent,
+                        contentColor = resultColors.onAccent
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                ) {
+                    Text("Done")
+                }
+            } else if (isWriting) {
                 Surface(
                     color = MaterialTheme.colorScheme.secondaryContainer,
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(28.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp)
@@ -521,13 +605,122 @@ private fun WriteTagConfirmContent(
                 Button(
                     onClick = onWriteClick,
                     enabled = url.isNotBlank(),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(28.dp),
+                    colors = if (resultColors != null) {
+                        ButtonDefaults.buttonColors(
+                            containerColor = resultColors.accent,
+                            contentColor = resultColors.onAccent
+                        )
+                    } else ButtonDefaults.buttonColors(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp)
                 ) {
-                    Text(if (writeError != null) "Retry Writing" else "Write Tag")
+                    Text(if (writeError != null) "Try again" else "Write Tag")
                 }
+            }
+        }
+    }
+}
+
+private enum class WriteResult { SUCCESS, FAILURE }
+
+/** [accent] colours the ring, badge, message and button; [glow] is the light behind the cover. */
+private class WriteResultColors(val accent: Color, val onAccent: Color, val glow: Color)
+
+/**
+ * Green and red are fixed rather than taken from the system palette, so they mean success and
+ * failure whatever the wallpaper is. Failure uses the theme's error colour.
+ */
+@Composable
+private fun writeResultColors(result: WriteResult): WriteResultColors {
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    return when (result) {
+        WriteResult.SUCCESS -> if (dark) {
+            WriteResultColors(accent = Color(0xFF7EDB8B), onAccent = Color(0xFF00390F), glow = Color(0xFF7EDB8B))
+        } else {
+            WriteResultColors(accent = Color(0xFF1F6C34), onAccent = Color.White, glow = Color(0xFF3FBF5F))
+        }
+        WriteResult.FAILURE -> WriteResultColors(
+            accent = MaterialTheme.colorScheme.error,
+            onAccent = MaterialTheme.colorScheme.onError,
+            glow = Color(0xFFFF6B5E)
+        )
+    }
+}
+
+/**
+ * The cover on the confirm screen. After a write it gets a green or red glow behind it, a ring
+ * in the same colour, and a check or cross badge on its corner.
+ */
+@Composable
+private fun ResultCover(
+    result: WriteResult?,
+    colors: WriteResultColors?,
+    modifier: Modifier = Modifier,
+    cover: @Composable () -> Unit
+) {
+    val shape = RoundedCornerShape(28.dp)
+    val glowAlpha by animateFloatAsState(
+        targetValue = if (result != null) 1f else 0f,
+        animationSpec = tween(durationMillis = 500),
+        label = "resultGlow"
+    )
+    // Keeps the last colour while the glow fades out after the result is cleared.
+    var lastGlow by remember { mutableStateOf(Color.Transparent) }
+    var lastAccent by remember { mutableStateOf(Color.Transparent) }
+    if (colors != null) {
+        lastGlow = colors.glow
+        lastAccent = colors.accent
+    }
+    Box(
+        modifier = modifier.drawBehind {
+            if (glowAlpha > 0f) {
+                val radius = size.maxDimension / 2 + 64.dp.toPx()
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        0f to lastGlow.copy(alpha = 0.75f * glowAlpha),
+                        0.6f to lastGlow.copy(alpha = 0.4f * glowAlpha),
+                        1f to lastGlow.copy(alpha = 0f),
+                        center = center,
+                        radius = radius
+                    ),
+                    radius = radius
+                )
+            }
+        }
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(shape)
+                .border(3.dp, lastAccent.copy(alpha = glowAlpha), shape)
+        ) {
+            cover()
+        }
+        AnimatedVisibility(
+            visible = result != null,
+            enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
+            exit = scaleOut() + fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .offset(x = 14.dp, y = 14.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(60.dp)
+                    .background(MaterialTheme.colorScheme.surface, CircleShape)
+                    .padding(4.dp)
+                    .background(lastAccent, CircleShape)
+                    .testTag("write_result_badge"),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (result == WriteResult.FAILURE) Icons.Default.Close else Icons.Default.Check,
+                    contentDescription = if (result == WriteResult.FAILURE) "Failed" else "Success",
+                    tint = colors?.onAccent ?: Color.Transparent,
+                    modifier = Modifier.size(32.dp)
+                )
             }
         }
     }

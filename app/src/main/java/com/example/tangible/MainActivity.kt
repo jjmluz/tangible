@@ -98,7 +98,7 @@ class MainActivity : ComponentActivity() {
     private var isWritingMode by mutableStateOf(false)
     private var isNfcTagLaunchBlocked by mutableStateOf(false)
     private var writeError by mutableStateOf<String?>(null)
-    private var showSuccessDialog by mutableStateOf(false)
+    private var writeSucceeded by mutableStateOf(false)
     private var dataToWrite: String? = null
     private var pendingTagInfo: TagWriteInfo? = null
     private var savedTags by mutableStateOf<List<SavedTag>>(emptyList())
@@ -275,12 +275,14 @@ class MainActivity : ComponentActivity() {
                             pendingTagInfo = info
                             isWritingMode = true
                             writeError = null
+                            writeSucceeded = false
                         },
                         onCancelWriting = {
                             Log.d("Tangible", "onCancelWriting")
                             isWritingMode = false
                             dataToWrite = null
                             writeError = null
+                            writeSucceeded = false
                         },
                         onSearchAlbums = { query -> homeAssistantRepository.searchAlbums(haServerUrl, haAccessToken, query) },
                         onSearchMovies = { query -> streamingRepository.searchMovies(query) },
@@ -320,8 +322,8 @@ class MainActivity : ComponentActivity() {
                         nowPlaying = nowPlaying,
                         openNowPlayingRequest = openNowPlayingRequest,
                         onRefreshMaPlayers = { refreshMaPlayers() },
-                        showSuccessDialog = showSuccessDialog,
-                        onSuccessDismissed = { showSuccessDialog = false }
+                        writeSucceeded = writeSucceeded,
+                        onSuccessDismissed = { writeSucceeded = false }
                     )
                 }
             }
@@ -648,7 +650,7 @@ class MainActivity : ComponentActivity() {
         dataToWrite = null
         pendingTagInfo = null
         writeError = null
-        showSuccessDialog = true
+        writeSucceeded = true
         Log.d("Tangible", "Successfully wrote to tag")
     }
 
@@ -718,30 +720,13 @@ fun TangibleApp(
     nowPlaying: NowPlayingController? = null,
     openNowPlayingRequest: Int = 0,
     onRefreshMaPlayers: () -> Unit = {},
-    showSuccessDialog: Boolean,
+    writeSucceeded: Boolean,
     onSuccessDismissed: () -> Unit
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val isHaConfigured = haServerUrl.isNotBlank() && haAccessToken.isNotBlank()
-
-    if (showSuccessDialog) {
-        AlertDialog(
-            onDismissRequest = onSuccessDismissed,
-            title = { Text("Success") },
-            text = { Text("Media link successfully written to tag!") },
-            confirmButton = {
-                TextButton(onClick = {
-                    onSuccessDismissed()
-                    navController.navigate("collection") {
-                        popUpTo("collection") { inclusive = false }
-                        launchSingleTop = true
-                    }
-                }) { Text("OK") }
-            }
-        )
-    }
 
     LaunchedEffect(Unit) {
         if (!hasShownWelcomeWizard) {
@@ -976,6 +961,11 @@ fun TangibleApp(
                 }
             }
             composable("write_tag") {
+                // Leaving the screen any way (Done, back arrow, system back) ends the write and
+                // clears its result, so the next visit starts clean.
+                DisposableEffect(Unit) {
+                    onDispose { onCancelWriting() }
+                }
                 WriteTagScreen(
                     onBackClick = {
                         onCancelWriting()
@@ -983,6 +973,14 @@ fun TangibleApp(
                     },
                     isWriting = isWritingMode,
                     writeError = writeError,
+                    writeSucceeded = writeSucceeded,
+                    onDone = {
+                        onSuccessDismissed()
+                        navController.navigate("collection") {
+                            popUpTo("collection") { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    },
                     onTagInfoUpdate = { info ->
                         if (info != null) {
                             onStartWriting(info)
