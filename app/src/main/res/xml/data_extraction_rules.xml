@@ -1,19 +1,13 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
--->
+<?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
+    <!-- Secrets are encrypted with a Keystore key that isn't backed up or transferred, so a copy
+         couldn't be read. Movie posters are fetched again when they're missing. -->
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="sharedpref" path="tangible_secrets.xml" />
+        <exclude domain="file" path="posters/" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="sharedpref" path="tangible_secrets.xml" />
+        <exclude domain="file" path="posters/" />
     </device-transfer>
-    -->
 </data-extraction-rules>

@@ -1,31 +1,21 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
 }
 
-// API keys live in local.properties (not tracked by git); see README.md.
-val localProperties = Properties().apply {
-    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
-}
-fun secret(name: String): String = localProperties.getProperty(name) ?: System.getenv(name) ?: ""
-
 android {
-    namespace = "com.example.tangible"
+    namespace = "com.jjmluz.tangible"
     compileSdk = 36
 
     defaultConfig {
+        // Kept from before the code moved to com.jjmluz.tangible: tags written before then name
+        // this app ID, and Android opens Google Play for them when it isn't installed.
         applicationId = "com.example.tangible"
         minSdk = 30
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        listOf("STREAMING_AVAILABILITY_API_KEY")
-            .forEach { buildConfigField("String", it, "\"${secret(it)}\"") }
     }
 
     buildTypes {
@@ -43,7 +33,6 @@ android {
     }
     buildFeatures {
         compose = true
-        buildConfig = true
     }
     testOptions {
         unitTests {
@@ -70,7 +59,6 @@ dependencies {
 
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)
-    androidTestImplementation(composeBom)
 
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
@@ -95,7 +83,4 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.12.1")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
-    androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 }
