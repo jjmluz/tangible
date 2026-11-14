@@ -114,6 +114,11 @@ Streaming availability information is provided by
 [Streaming Availability API by Movie of the Night](https://www.movieofthenight.com/about/api).
 Its images can only be used while you have a subscription to the API (the free plan counts).
 
+Album and movie artwork shown in the screenshots is the property of its
+respective copyright holders and is used here only to illustrate the app's
+functionality. It is not covered by this project's license. This project is
+not affiliated with or endorsed by any of the artists, studios, or labels shown.
+
 ## License
 
 [MIT](LICENSE)
