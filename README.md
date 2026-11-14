@@ -1,11 +1,10 @@
 # Tangible
 
-Physical media → NFC → digital media.
+Tangible is an Android app that does everything through [Home Assistant](https://www.home-assistant.io).
 
-Stick an NFC tag on a vinyl, CD or DVD, write it with Tangible, and scanning it later plays that
-album or movie on your speakers or TV. It's an Android app (Kotlin, Jetpack Compose) that does
-everything through your own [Home Assistant](https://www.home-assistant.io). It isn't on the Play
-Store: you build it yourself.
+> **Step 1.** Stick an NFC tag on a vinyl, cassette, CD, DVD, VHS, etc.  
+> **Step 2.** Write it with Tangible.  
+> **Step 3.** Scanning it later plays that album or movie on your speakers or TV.
 
 <p>
   <img src="docs/screenshots/music.png" width="260" alt="Music collection: a grid of album covers">
@@ -58,10 +57,6 @@ URI>` for anything else.
   that movie. The Google TV app's remote opens on the phone at the same time, if it's installed.
 - **Services Tangible can open:** Netflix, Disney+, HBO Max, Prime Video and Apple TV, where
   they're available in your region.
-  Other services the API knows (Hulu, Paramount+ and so on) are listed in Settings but can't be
-  opened yet, because each needs a link format that's been tested on a TV.
-- **Posters:** Tangible keeps a copy of each movie tag's poster on the phone, because the API's
-  poster links expire after some months. A missing copy is fetched again quietly.
 
 ## Setup
 
@@ -73,8 +68,6 @@ URI>` for anything else.
       The free plan is enough and doesn't ask for payment details (it allowed 1,000 requests a
       month when this was written).
    2. Copy your API key from the console.
-   3. Each movie search is one request. Your key is yours alone: don't share it, and don't use a
-      key from RapidAPI, which works differently.
 3. **In Tangible**, open Settings:
    - **Home Assistant → Server:** your Home Assistant address, e.g.
      `http://homeassistant.local:8123`, and the access token.
@@ -114,15 +107,6 @@ Needs JDK 17+ (Android Studio's bundled JBR works) and the Android SDK.
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
-
-## Good to know
-
-- The TV links are tested on a Google TV Streamer. A few rely on details that may change:
-  Netflix only opens the title with `?source=30` on the link, and the phone's TV remote is opened
-  with an undocumented Google TV app intent.
-- Android TV Remote doesn't report what's playing, so there's no Now Playing for movies.
-- The app ID is still `com.example.tangible`: tags written by older versions name it, and Android
-  opens Google Play for them when that app ID isn't installed.
 
 ## Credits
 
